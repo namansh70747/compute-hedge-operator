@@ -63,7 +63,7 @@ func (r *ComputePositionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{RequeueAfter: reconcileInterval}, nil
 	}
 
-	util, err := r.Telemetry.Utilization(ctx, pos.Name)
+	util, err := r.Telemetry.Utilization(ctx, pos.Name, pos.Namespace)
 	if err != nil {
 		l.Info("utilization unavailable, requeueing", "error", err.Error())
 		r.Recorder.Eventf(&pos, "Warning", "TelemetryUnavailable", "could not read utilization: %v", err)

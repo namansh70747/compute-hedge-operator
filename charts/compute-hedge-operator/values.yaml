@@ -1,21 +1,64 @@
 replicaCount: 1
 
+nameOverride: ""
+fullnameOverride: ""
+
 image:
-  repository: compute-hedge-operator
-  tag: dev
+  repository: ghcr.io/namansh70747/compute-hedge-operator
+  tag: "0.1.0"
   pullPolicy: IfNotPresent
 
-# Price source: "mock" uses the bundled mock service, "ornn" uses the real Ornn Data API.
+# Optional: pull from a private registry
+imagePullSecrets: []
+
+clusterName: compute-hedge
+
+# Modes: auto | mock | live
+# auto = live when credentials/URLs are present (via secret or values), otherwise mock.
 ocpi:
-  mode: mock
-  url: http://mockocpi.compute-hedge-system.svc:8080
+  mode: auto
+  # Only used when price resolves to mock (no ORNN_API_TOKEN).
+  mockUrl: ""
 
 ornn:
   baseUrl: https://api.ornnai.com
+  # Prefer credentials.existingSecret or credentials.create. Do not put real tokens here.
   token: ""
-  pricePath: ""
+  # Must include {sku} if the path is per-SKU. Adapt to whatever Ornn hands over.
+  pricePath: /v1/ocpi/{sku}/spot
 
-gpuExporterUrl: http://gpuexporter.compute-hedge-system.svc:8081
+telemetry:
+  mode: auto
+  # Only used when telemetry resolves to mock (no PROMETHEUS_URL).
+  gpuExporterUrl: ""
+  prometheusUrl: ""
+  # PromQL template; {position} and {namespace} are substituted.
+  query: 'avg(DCGM_FI_DEV_GPU_UTIL{position="{position}"})'
+
+market:
+  mode: auto
+  apiUrl: ""
+  apiPath: /v1/marketplace/supply
+  # Safety switch: nothing is posted unless this is true AND apiUrl is set.
+  writeEnabled: false
+
+auth:
+  scheme: Bearer
+  header: Authorization
+
+# Optional Kubernetes Secret with live credentials.
+# Prefer create:true with values, or point existingSecret at a Secret you already applied
+# (see config/secret.example.yaml). Token is never baked into the image.
+credentials:
+  # Name of an existing Secret in the release namespace (envFrom, optional).
+  # Set to "" to disable envFrom when installing without a Secret.
+  existingSecret: ""
+  # When true, the chart creates the Secret from the fields below.
+  create: false
+  ornnApiToken: ""
+  prometheusUrl: ""
+  marketApiUrl: ""
+  marketWriteEnabled: "false"
 
 metricsAddr: ":8082"
 healthAddr: ":8083"

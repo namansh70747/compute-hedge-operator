@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Compute Hedge Operator — Flow</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #080b0f;
+      --surface: #0f141c;
+      --card: #151c26;
+      --line: #243040;
+      --text: #eef2f7;
+      --dim: #8a9bb0;
+      --cyan: #3db8e8;
+      --amber: #d9a441;
+      --green: #3dbf8f;
+      --purple: #9b8afb;
+      --slate: #5c6b7e;
+      --scale: 1;
+      --fs: 1;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: "IBM Plex Sans", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* toolbar */
+    .toolbar {
+      position: fixed;
+      top: 10px;
+      right: 12px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: rgba(15,20,28,.92);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      backdrop-filter: blur(8px);
+      font-size: 11px;
+      color: var(--dim);
+    }
+
+    .toolbar button {
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 5px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    .toolbar button:hover { border-color: var(--cyan); color: var(--cyan); }
+    .toolbar button.active { border-color: var(--cyan); color: var(--cyan); background: rgba(61,184,232,.1); }
+
+    .toolbar input[type=range] {
+      width: 72px;
+      accent-color: var(--cyan);
+    }
+
+    .toolbar .pct {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 10px;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    /* viewport centers & scales poster */
+    .viewport {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .poster-wrap {
+      transform: scale(var(--scale));
+      transform-origin: center center;
+      transition: transform 0.15s ease;
+    }
+
+    /* fixed design canvas — 1280 × 720 (16:9, one screen) */
+    .poster {
+      width: 1280px;
+      height: 720px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px 12px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 8px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .topbar .chips { display: flex; gap: 5px; }
+    .chip {
+      font-size: calc(8px * var(--fs));
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: 99px;
+      border: 1px solid var(--line);
+    }
+    .chip.sim { color: var(--amber); }
+    .chip.live { color: var(--green); border-color: rgba(61,191,143,.4); }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .top-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .zone {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      min-height: 0;
+    }
+
+    .zone.dashed { border-style: dashed; opacity: 0.92; }
+    .zone.hero { border-color: rgba(61,184,232,.28); }
+
+    .zh {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .zl {
+      font-size: calc(8px * var(--fs));
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+
+    .zb {
+      font-size: calc(7px * var(--fs));
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 99px;
+      border: 1px solid var(--line);
+      color: var(--dim);
+    }
+    .zb.g { color: var(--green); border-color: rgba(61,191,143,.3); }
+    .zb.a { color: var(--amber); border-color: rgba(217,164,65,.3); }
+
+    .g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .g5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+
+    .c {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 8px;
+    }
+    .c.p { border-top: 2px solid var(--purple); }
+    .c.g { border-top: 2px solid var(--green); }
+    .c.s { border-top: 2px solid var(--slate); }
+    .c.cy { border-top: 2px solid var(--cyan); }
+    .c.am { border-top: 2px solid var(--amber); }
+
+    .c .n { font-size: calc(10px * var(--fs)); font-weight: 600; line-height: 1.2; margin-bottom: 2px; }
+    .c .f { font-family: "IBM Plex Mono", monospace; font-size: calc(8px * var(--fs)); color: var(--dim); line-height: 1.35; }
+    .c .h { font-size: calc(8px * var(--fs)); color: var(--dim); margin-top: 2px; }
+
+    /* span full width rows */
+    .span2 { grid-column: 1 / -1; }
+
+    /* feeds + operator row — grows to fill the middle so no dead space */
+    .mid-row {
+      display: grid;
+      grid-template-columns: 1fr 1.5fr 1fr;
+      gap: 10px;
+      flex: 1 1 auto;
+      min-height: 0;
+      align-items: stretch;
+    }
+
+    .feed {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      justify-content: center;
+      flex: 1;
+    }
+
+    .flow-in {
+      margin-top: 10px;
+      text-align: center;
+      font-size: calc(7.5px * var(--fs));
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      opacity: 0.7;
+    }
+    .flow-in.right::after { content: "  ▶"; }
+    .flow-in.left::before { content: "◀  "; }
+
+    .feed-item {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 10px;
+    }
+
+    .tag {
+      font-size: calc(7px * var(--fs));
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 5px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .tag.sim { background: rgba(217,164,65,.15); color: var(--amber); }
+    .tag.live { background: rgba(61,191,143,.12); color: var(--green); }
+
+    .feed-item .nm { font-size: calc(9px * var(--fs)); font-weight: 600; }
+    .feed-item .fp { font-family: "IBM Plex Mono", monospace; font-size: calc(7.5px * var(--fs)); color: var(--dim); }
+
+    .op-center {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .op-hero {
+      background: linear-gradient(145deg, #141c28, #111820);
+      border: 1px solid rgba(61,184,232,.28);
+      border-radius: 8px;
+      padding: 14px 12px;
+      text-align: center;
+      box-shadow: 0 0 30px -12px var(--cyan);
+    }
+
+    .op-hero .big { font-size: calc(15px * var(--fs)); font-weight: 600; margin-bottom: 4px; }
+    .op-hero .fp { font-family: "IBM Plex Mono", monospace; font-size: calc(7.5px * var(--fs)); color: var(--dim); line-height: 1.45; }
+
+    .steps-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+    }
+
+    .st {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 4px 5px;
+      text-align: center;
+    }
+
+    .st .num { font-family: "IBM Plex Mono", monospace; font-size: calc(8px * var(--fs)); color: var(--cyan); }
+    .st .tx { font-size: calc(8px * var(--fs)); font-weight: 500; line-height: 1.2; margin-top: 1px; }
+
+    .formula {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: calc(7.5px * var(--fs));
+      color: var(--dim);
+      text-align: center;
+      padding: 5px 8px;
+      background: rgba(217,164,65,.06);
+      border: 1px solid rgba(217,164,65,.18);
+      border-radius: 6px;
+    }
+    .formula b { color: var(--amber); font-weight: 500; }
+
+  .out-row {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+
+    .out {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 8px;
+      border-top: 2px solid var(--cyan);
+    }
+    .out.mk { border-top-color: var(--amber); }
+
+    .out .n { font-size: calc(10px * var(--fs)); font-weight: 600; margin-bottom: 2px; }
+    .out .f { font-family: "IBM Plex Mono", monospace; font-size: calc(7.5px * var(--fs)); color: var(--dim); line-height: 1.35; }
+    .out .h { font-size: calc(7.5px * var(--fs)); color: var(--dim); margin-top: 3px; }
+
+    .foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: calc(8px * var(--fs));
+      color: var(--dim);
+      padding-top: 2px;
+    }
+
+    .keys { display: flex; gap: 12px; }
+    .keys span::before {
+      content: "";
+      display: inline-block;
+      width: 5px; height: 5px;
+      border-radius: 1px;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .keys .c::before { background: var(--cyan); }
+    .keys .a::before { background: var(--amber); }
+    .keys .g::before { background: var(--green); }
+    .keys .s::before { background: var(--slate); }
+
+    .arrow-down {
+      text-align: center;
+      color: var(--cyan);
+      font-size: 10px;
+      line-height: 1;
+      opacity: 0.5;
+      grid-column: 1 / -1;
+      margin: -4px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button type="button" id="btnFit">Fit screen</button>
+    <button type="button" id="btn75">75%</button>
+    <button type="button" id="btn100">100%</button>
+    <button type="button" id="btn125">125%</button>
+    <input type="range" id="zoomSlider" min="50" max="150" value="100" />
+    <span class="pct" id="zoomPct">100%</span>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <div class="poster-wrap" id="posterWrap">
+      <article class="poster" id="poster">
+        <div class="topbar">
+          <div class="chips">
+            <span class="chip sim">simulated</span>
+            <span class="chip live">live with credentials</span>
+          </div>
+          <div class="chips">
+            <span class="chip" style="color:var(--dim)">1280×720 · one page</span>
+          </div>
+        </div>
+
+        <div class="main">
+          <!-- row 1: Ornn + Config side by side -->
+          <div class="top-row">
+            <section class="zone">
+              <div class="zh"><span class="zl">Ornn</span><span class="zb g">external</span></div>
+              <div class="g3">
+                <div class="c p"><div class="n">Data API · OCPI</div><div class="f">ornndata.go</div><div class="h">ORNN_API_TOKEN</div></div>
+                <div class="c p"><div class="n">Marketplace</div><div class="f">httppublisher.go</div><div class="h">PublishSupply</div></div>
+                <div class="c p"><div class="n">Index hedge</div><div class="h">util ≠ index → basis risk</div></div>
+              </div>
+            </section>
+
+            <section class="zone">
+              <div class="zh"><span class="zl">Config</span><span class="zb">auto·mock·live</span></div>
+              <div class="g4">
+                <div class="c g"><div class="n">.env / Secret</div><div class="f">.env.example</div></div>
+                <div class="c g"><div class="n">config.Load</div><div class="f">internal/config/</div></div>
+                <div class="c g"><div class="n">make live</div><div class="f">Makefile</div></div>
+                <div class="c g"><div class="n">no rebuild</div><div class="h">badge flips</div></div>
+              </div>
+            </section>
+          </div>
+
+          <!-- row 2: infra strip -->
+          <section class="zone dashed span2">
+            <div class="zh"><span class="zl">Infra below — not replaced</span><span class="zb">Karpenter · KEDA · OpenCost</span></div>
+            <div class="g5">
+              <div class="c s"><div class="n">Karpenter</div><div class="h">nodes</div></div>
+              <div class="c s"><div class="n">KEDA</div><div class="h">pods</div></div>
+              <div class="c s"><div class="n">OpenCost</div><div class="h">cost $</div></div>
+              <div class="c s"><div class="n">Workloads</div><div class="f">deploy/workloads.yaml</div></div>
+              <div class="c s"><div class="n">ComputePosition</div><div class="f">api/v1alpha1/ · config/crd/</div></div>
+            </div>
+          </section>
+
+          <div class="arrow-down">▼</div>
+
+          <!-- row 3: feeds | operator | feeds -->
+          <div class="mid-row">
+            <section class="zone">
+              <div class="zh"><span class="zl">Price in</span></div>
+              <div class="feed">
+                <div class="feed-item"><span class="tag sim">sim</span><div><div class="nm">mockocpi</div><div class="fp">cmd/mockocpi</div></div></div>
+                <div class="feed-item"><span class="tag live">live</span><div><div class="nm">Ornn API</div><div class="fp">internal/ocpi/</div></div></div>
+                <div class="flow-in right">$ spot price → loop</div>
+              </div>
+            </section>
+
+            <section class="zone hero op-center">
+              <div class="zh"><span class="zl">Operator</span><span class="zb a">marks hedge</span></div>
+              <div class="op-hero">
+                <div class="big">Reconciler loop</div>
+                <div class="fp">cmd/operator/main.go · computeposition_controller.go</div>
+              </div>
+              <div class="steps-row">
+                <div class="st"><div class="num">1</div><div class="tx">Read CRD</div></div>
+                <div class="st"><div class="num">2</div><div class="tx">Price+util</div></div>
+                <div class="st"><div class="num">3</div><div class="tx">P&L·basis</div></div>
+                <div class="st"><div class="num">4</div><div class="tx">→ market</div></div>
+                <div class="st"><div class="num">5</div><div class="tx">Status</div></div>
+              </div>
+              <div class="formula"><b>100% util</b> hedge holds · <b>idle</b> = spot×idleGPUs</div>
+            </section>
+
+            <section class="zone">
+              <div class="zh"><span class="zl">Util in</span></div>
+              <div class="feed">
+                <div class="feed-item"><span class="tag sim">sim</span><div><div class="nm">gpuexporter</div><div class="fp">cmd/gpuexporter</div></div></div>
+                <div class="feed-item"><span class="tag live">live</span><div><div class="nm">Prometheus+DCGM</div><div class="fp">telemetry/prometheus.go</div></div></div>
+                <div class="flow-in left">loop ← % GPU util</div>
+              </div>
+            </section>
+          </div>
+
+          <div class="arrow-down">▼</div>
+
+          <!-- row 4: outputs -->
+          <div class="out-row">
+            <div class="out"><div class="n">Console</div><div class="f">cmd/console/ · web/src/</div><div class="h">P&L · basis · SIM/LIVE</div></div>
+            <div class="out"><div class="n">Grafana</div><div class="f">observability/ · metrics/</div><div class="h">alerts · drill-down</div></div>
+            <div class="out mk"><div class="n">Marketplace</div><div class="f">internal/market/</div><div class="h">idle → Ornn fees</div></div>
+            <div class="out"><div class="n">Ship</div><div class="f">Dockerfile · demo.ps1</div><div class="h">kind · make demo</div></div>
+          </div>
+        </div>
+
+        <footer class="foot">
+          <div class="keys">
+            <span class="c">data</span>
+            <span class="a">risk/market</span>
+            <span class="g">config</span>
+            <span class="s">infra below</span>
+          </div>
+          <span>advisory · opt-in · least-privilege</span>
+        </footer>
+      </article>
+    </div>
+  </div>
+
+  <script>
+    const POSTER_W = 1280, POSTER_H = 720;
+    const root = document.documentElement;
+    const slider = document.getElementById("zoomSlider");
+    const pctEl = document.getElementById("zoomPct");
+    let userScale = 1;
+
+    function fitScale() {
+      const pad = 24;
+      const vw = window.innerWidth - pad;
+      const vh = window.innerHeight - pad;
+      return Math.min(vw / POSTER_W, vh / POSTER_H, 1.5);
+    }
+
+    function applyScale(s, fromFit) {
+      userScale = s;
+      root.style.setProperty("--scale", s);
+      const pct = Math.round(s * 100);
+      pctEl.textContent = pct + "%";
+      slider.value = Math.min(150, Math.max(50, pct));
+      document.querySelectorAll(".toolbar button").forEach(b => b.classList.remove("active"));
+      if (fromFit) document.getElementById("btnFit").classList.add("active");
+      else if (pct === 75) document.getElementById("btn75").classList.add("active");
+      else if (pct === 100) document.getElementById("btn100").classList.add("active");
+      else if (pct === 125) document.getElementById("btn125").classList.add("active");
+    }
+
+    function setFontScale(fs) {
+      root.style.setProperty("--fs", fs);
+    }
+
+    document.getElementById("btnFit").onclick = () => applyScale(fitScale(), true);
+    document.getElementById("btn75").onclick = () => applyScale(0.75, false);
+    document.getElementById("btn100").onclick = () => applyScale(1, false);
+    document.getElementById("btn125").onclick = () => applyScale(1.25, false);
+
+    slider.oninput = () => {
+      applyScale(parseInt(slider.value, 10) / 100, false);
+    };
+
+    window.addEventListener("resize", () => {
+      if (document.getElementById("btnFit").classList.contains("active")) {
+        applyScale(fitScale(), true);
+      }
+    });
+
+    // start: fit screen, slightly larger text if room
+    applyScale(fitScale(), true);
+    if (fitScale() >= 0.95) setFontScale(1.05);
+  </script>
+</body>
+</html>

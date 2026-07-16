@@ -4,3 +4,16 @@ description: Advisory operator that tracks hedged GPU positions against the OCPI
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+home: https://github.com/namansh70747/compute-hedge-operator
+sources:
+  - https://github.com/namansh70747/compute-hedge-operator
+maintainers:
+  - name: Naman Sharma
+    email: namsh70747@gmail.com
+keywords:
+  - kubernetes
+  - gpu
+  - finops
+  - ocpi
+  - operator
+

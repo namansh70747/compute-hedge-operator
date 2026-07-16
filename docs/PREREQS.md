@@ -1,40 +1,46 @@
 # Prerequisites and cost
 
+## Path A — Local demo (mock, free)
+
 Everything here runs locally and is free. No cloud account, no GPUs, and no paid data
-feed are required for the demo.
+feed are required.
 
-## Tools
-
-| Tool | Version used | Purpose |
+| Tool | Version | Purpose |
 | --- | --- | --- |
-| Go | 1.26+ | build the binaries and run tests |
+| Go | 1.26+ | build binaries and run tests |
 | Docker | recent | build the image, back the kind cluster |
 | kind | 0.32+ | local Kubernetes cluster in Docker |
 | kubectl | 1.30+ | apply manifests, port-forward |
-| Helm | 3+ (optional) | install the operator chart |
+| Make or PowerShell | — | `make demo` or `scripts/demo.ps1` |
 
-## Cost
+Cost: none for the demo. Bundled `mockocpi` and `gpuexporter` replace paid feeds and GPUs.
+Prometheus and Grafana run as single local pods. You need a machine that can run a one-node
+kind cluster.
 
-- The demo uses a bundled mock OCPI price service and a simulated GPU utilization exporter,
-  so there is no data-feed cost and no GPU cost.
-- Prometheus and Grafana run as single local pods.
-- The only requirement is a machine that can run a one-node kind cluster.
+## Path B — Install on an existing cluster
 
-## Going beyond the demo
+| Tool | Version | Purpose |
+| --- | --- | --- |
+| kubectl | 1.30+ | apply / helm install |
+| Helm | 3+ | install the operator chart |
+| Docker (optional) | recent | only if you build and push your own image |
+| Cluster access | — | a Kubernetes cluster you control |
 
-Every source is pluggable and auto-detected. Copy `.env.example` to `.env`, fill in what you
-have, and run `make live` (in-cluster) or `make run-operator` / `make run-console` (local).
-Nothing else changes.
+For **live** utilization the cluster should already run NVIDIA GPU Operator (or equivalent)
+and scrape `dcgm-exporter` into Prometheus. This project does not install those for you.
 
-- **Real prices:** set `ORNN_API_TOKEN` (with `ORNN_API_BASE_URL` / `ORNN_API_PRICE_PATH`).
-  With `OCPI_MODE=auto` the presence of the token flips the price feed to the live OCPI
-  index via `internal/ocpi/ornndata.go`.
-- **Real utilization:** set `PROMETHEUS_URL` (optionally `TELEMETRY_QUERY`) to read NVIDIA
-  `dcgm-exporter` metrics through Prometheus. The mock exporter is used when it is blank.
-- **Marketplace write-back:** set `MARKET_API_URL` and `MARKET_WRITE_ENABLED=true` to post
-  idle capacity as real supply. Off by default so nothing is ever posted by accident.
-- **Any auth scheme:** `AUTH_SCHEME` / `AUTH_HEADER` adapt every live HTTP client to whatever
-  token format Ornn provides.
+For **live** prices you need an Ornn Data (or compatible) API token and a reachable base URL.
+Adapt `ORNN_API_PRICE_PATH` to the subscribed feed; the default template is
+`/v1/ocpi/{sku}/spot`.
 
-See the full knob reference in `.env.example` and the "Go live in 60 seconds" section of the
-README.
+For **marketplace write-back** you need an HTTP endpoint that accepts this repo's offer JSON
+(and you must set `MARKET_WRITE_ENABLED=true`). There is no claimed public Ornn supply API in
+this repository.
+
+## Going live (either path)
+
+Copy `.env.example` to `.env` (local) or apply `config/secret.example.yaml` as
+`ornn-credentials` (in-cluster). With `*_MODE=auto`, filled credentials flip each source to
+live and the console badge to **LIVE**. Blank credentials keep the simulator.
+
+See the README Path A / Path B sections and `.env.example` for the full knob reference.

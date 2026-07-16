@@ -1,0 +1,42 @@
+{{- /*
+NOTES after helm install / upgrade.
+*/ -}}
+compute-hedge-operator {{ .Chart.Version }} installed in namespace {{ .Release.Namespace }}.
+
+Release resources are named {{ include "chp.fullname" . }}.
+This chart installs the operator only (CRD + RBAC + Deployment + metrics Service).
+Mocks, console, and Grafana are not included — use Path A (make demo) for the full
+local stack, or apply deploy/console.yaml after the image is available.
+
+1. Watch the operator:
+
+   kubectl -n {{ .Release.Namespace }} get pods -l app={{ include "chp.fullname" . }} -w
+
+2. Apply a ComputePosition (sample or your own):
+
+   kubectl apply -f deploy/samples/computepositions.yaml
+
+   kubectl get computepositions -A -w
+
+3. Go live (real price / DCGM / marketplace):
+
+   # Option A: apply a Secret (see config/secret.example.yaml), then restart:
+   kubectl -n {{ .Release.Namespace }} apply -f config/secret.yaml
+   kubectl -n {{ .Release.Namespace }} rollout restart deploy/{{ include "chp.fullname" . }}
+
+   # Option B: helm upgrade with credentials.create=true and --set credentials.ornnApiToken=...
+
+   Blank credentials keep every source on the mock path. Filled credentials flip to live
+   with no code change. Marketplace posts only when MARKET_API_URL is set AND
+   MARKET_WRITE_ENABLED=true.
+
+4. Metrics:
+
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "chp.fullname" . }}-metrics 8082:8082
+
+Image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+Modes: ocpi={{ .Values.ocpi.mode }} telemetry={{ .Values.telemetry.mode }} market={{ .Values.market.mode }}
+
+Build-from-source fallback (no GHCR):
+  docker build -t <your-registry>/compute-hedge-operator:0.1.0 .
+  helm upgrade --install ... --set image.repository=<your-registry>/compute-hedge-operator --set image.tag=0.1.0

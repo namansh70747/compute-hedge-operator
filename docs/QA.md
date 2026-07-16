@@ -2,9 +2,10 @@
 
 **Is this real data?**
 The demo uses a bundled mock price service and a simulated utilization exporter so it is free
-and deterministic. Both sit behind interfaces. Setting `OCPI_MODE=ornn` with a subscription
-token reads the real OCPI index, and pointing the telemetry source at dcgm-exporter reads real
-utilization. No code changes are needed.
+and deterministic. Both sit behind interfaces. With `OCPI_MODE=auto` (the default), setting
+`ORNN_API_TOKEN` flips the price feed to the live Ornn Data API; setting `PROMETHEUS_URL`
+flips utilization to real DCGM metrics via Prometheus. Modes are `auto|mock|live` — there is
+no `ornn` mode. No code changes are needed.
 
 **How is basis risk actually computed?**
 Per hour: `basisRisk = spot * (gpuCount - utilizedGPUs)`. It is the quantity mismatch between

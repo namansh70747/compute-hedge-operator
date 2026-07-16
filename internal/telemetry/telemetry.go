@@ -13,8 +13,10 @@ import (
 )
 
 // Source returns the current utilization percent for a named position.
+// namespace is the ComputePosition namespace and is passed through for PromQL
+// templates that use {namespace}; the mock exporter ignores it.
 type Source interface {
-	Utilization(ctx context.Context, position string) (float64, error)
+	Utilization(ctx context.Context, position, namespace string) (float64, error)
 }
 
 // HTTPSource reads utilization from the gpuexporter JSON API.
@@ -37,7 +39,7 @@ type utilResponse struct {
 }
 
 // Utilization fetches the current utilization percent for a position.
-func (s *HTTPSource) Utilization(ctx context.Context, position string) (float64, error) {
+func (s *HTTPSource) Utilization(ctx context.Context, position, _ string) (float64, error) {
 	url := fmt.Sprintf("%s/positions/%s", s.baseURL, position)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

@@ -52,8 +52,9 @@ type promResponse struct {
 }
 
 // Utilization runs the configured instant query for a position and returns the value.
-func (s *PrometheusSource) Utilization(ctx context.Context, position string) (float64, error) {
+func (s *PrometheusSource) Utilization(ctx context.Context, position, namespace string) (float64, error) {
 	q := strings.ReplaceAll(s.query, "{position}", position)
+	q = strings.ReplaceAll(q, "{namespace}", namespace)
 	endpoint := fmt.Sprintf("%s/api/v1/query?query=%s", s.baseURL, url.QueryEscape(q))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {

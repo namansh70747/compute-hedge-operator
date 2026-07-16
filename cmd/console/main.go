@@ -36,7 +36,6 @@ func init() {
 func main() {
 	addr := envDefault("LISTEN_ADDR", ":8090")
 	appCfg := config.Load()
-	priceURL := envDefault("OCPI_URL", "http://mockocpi:8080")
 	interval := appCfg.PollInterval
 
 	restCfg := ctrl.GetConfigOrDie()
@@ -51,7 +50,10 @@ func main() {
 		sources.Telemetry.Mode, sources.Telemetry.Label,
 		sources.Market.Mode, sources.Market.Label)
 
-	builder := console.NewBuilder(c, console.NewHTTPPrices(priceURL), appCfg.Cluster, sources)
+	// Same factory as the operator: mock OCPI when no token, live Ornn Data when present.
+	// Never show LIVE unless Sources() resolved live — the badge tracks this provenance.
+	priceFetcher := console.NewSourcePrices(appCfg.BuildOCPISource())
+	builder := console.NewBuilder(c, priceFetcher, appCfg.Cluster, sources)
 
 	var (
 		mu     sync.RWMutex
@@ -98,7 +100,8 @@ func main() {
 	})
 	mux.HandleFunc("/", spaHandler(dist, fileServer))
 
-	log.Printf("console listening on %s (prices=%s, cluster=%s)", addr, priceURL, appCfg.Cluster)
+	log.Printf("console listening on %s (price=%s/%s, cluster=%s)",
+		addr, sources.Price.Mode, sources.Price.Label, appCfg.Cluster)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           mux,

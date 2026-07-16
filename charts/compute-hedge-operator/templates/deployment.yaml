@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "chp.name" . }}
+  name: {{ include "chp.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "chp.labels" . | nindent 4 }}
@@ -15,31 +15,77 @@ spec:
       labels:
         {{- include "chp.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "chp.name" . }}
+      serviceAccountName: {{ include "chp.fullname" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
       containers:
         - name: operator
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/operator"]
           env:
+            - name: CLUSTER_NAME
+              value: {{ .Values.clusterName | quote }}
             - name: OCPI_MODE
               value: {{ .Values.ocpi.mode | quote }}
+            - name: TELEMETRY_MODE
+              value: {{ .Values.telemetry.mode | quote }}
+            - name: MARKET_MODE
+              value: {{ .Values.market.mode | quote }}
+            {{- if .Values.ocpi.mockUrl }}
             - name: OCPI_URL
-              value: {{ .Values.ocpi.url | quote }}
+              value: {{ .Values.ocpi.mockUrl | quote }}
+            {{- end }}
             - name: ORNN_API_BASE_URL
               value: {{ .Values.ornn.baseUrl | quote }}
+            {{- if .Values.ornn.token }}
             - name: ORNN_API_TOKEN
               value: {{ .Values.ornn.token | quote }}
+            {{- end }}
+            {{- if .Values.ornn.pricePath }}
             - name: ORNN_API_PRICE_PATH
               value: {{ .Values.ornn.pricePath | quote }}
+            {{- end }}
+            {{- if .Values.telemetry.gpuExporterUrl }}
             - name: GPU_EXPORTER_URL
-              value: {{ .Values.gpuExporterUrl | quote }}
+              value: {{ .Values.telemetry.gpuExporterUrl | quote }}
+            {{- end }}
+            {{- if .Values.telemetry.prometheusUrl }}
+            - name: PROMETHEUS_URL
+              value: {{ .Values.telemetry.prometheusUrl | quote }}
+            {{- end }}
+            {{- if .Values.telemetry.query }}
+            - name: TELEMETRY_QUERY
+              value: {{ .Values.telemetry.query | quote }}
+            {{- end }}
+            {{- if .Values.market.apiUrl }}
+            - name: MARKET_API_URL
+              value: {{ .Values.market.apiUrl | quote }}
+            {{- end }}
+            {{- if .Values.market.apiPath }}
+            - name: MARKET_API_PATH
+              value: {{ .Values.market.apiPath | quote }}
+            {{- end }}
+            - name: MARKET_WRITE_ENABLED
+              value: {{ .Values.market.writeEnabled | quote }}
+            - name: AUTH_SCHEME
+              value: {{ .Values.auth.scheme | quote }}
+            - name: AUTH_HEADER
+              value: {{ .Values.auth.header | quote }}
             - name: METRICS_ADDR
               value: {{ .Values.metricsAddr | quote }}
             - name: HEALTH_ADDR
               value: {{ .Values.healthAddr | quote }}
+          {{- if or .Values.credentials.existingSecret .Values.credentials.create }}
+          envFrom:
+            - secretRef:
+                name: {{ if .Values.credentials.create }}{{ include "chp.fullname" . }}-credentials{{ else }}{{ .Values.credentials.existingSecret }}{{ end }}
+                optional: {{ if .Values.credentials.create }}false{{ else }}true{{ end }}
+          {{- end }}
           ports:
             - name: metrics
               containerPort: 8082
@@ -66,7 +112,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "chp.name" . }}-metrics
+  name: {{ include "chp.fullname" . }}-metrics
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "chp.labels" . | nindent 4 }}

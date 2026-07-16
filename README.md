@@ -1,8 +1,8 @@
 # compute-hedge-operator
 
 A Kubernetes operator that keeps a hedged block of GPU capacity honest against the
-market. It reads the live OCPI spot price and real GPU utilization, then continuously
-answers three questions for every position:
+market. It reads the OCPI spot price and GPU utilization, then continuously answers
+three questions for every position:
 
 - How much of my hedge is actually backed by real usage, and how much is drifting into **basis risk**?
 - What is my hedge **P&L** right now, marked against the index?
@@ -10,80 +10,26 @@ answers three questions for every position:
 
 It is advisory by default. It never touches a workload unless a position explicitly opts in.
 
-## Why this exists
+**License: MIT** (see [LICENSE](LICENSE)).
 
-Ornn turns GPU compute into a tradable asset: the OCPI index, cash-settled futures, and a
-marketplace for capacity. Those instruments settle against an **index**, but a customer's
-real exposure is their **own utilization on their own SKUs**. When utilization drops, the
-hedge no longer matches reality and the gap leaks money. That gap is basis risk, and it
-lives inside the Kubernetes cluster where the GPUs actually run, which is exactly where a
-financial desk cannot see it.
+## One build, two realities
 
-This operator sits in that cluster and turns raw telemetry into position-level economics:
-basis risk, hedge effectiveness, live P&L, and idle capacity that can be routed back to
-Ornn's marketplace to earn fees instead of sitting stranded.
+| | No credentials (demo) | Credentials present (real) |
+| --- | --- | --- |
+| Price | Bundled `mockocpi` simulator | Ornn Data API (`ORNN_API_TOKEN`) |
+| GPU utilization | Bundled `gpuexporter` | Prometheus / DCGM (`PROMETHEUS_URL`) |
+| Marketplace | Log-only (advisory) | HTTP POST when `MARKET_WRITE_ENABLED=true` |
+| Console badge | **SIMULATED DATA** | **LIVE** (same sources as the operator) |
 
-## What it does
+Same image, same code. Supply a `.env` or the `ornn-credentials` Secret and every surface
+flips to live with no code change. Live HTTP paths and JSON shapes are **configurable
+adapters** — set `ORNN_API_PRICE_PATH` (must include `{sku}` if per-SKU) to match whatever
+endpoint you are given. This repo does not claim a public Ornn marketplace contract;
+write-back is off unless you set a URL and the write flag.
 
-- **Idle-capacity detection (primary).** Sustained low utilization on a position flags GPUs
-  as available for the secondary market, with hysteresis so the flag does not thrash.
-- **Basis-risk and hedge-effectiveness accounting.** A small, unit-tested model derives the
-  per-hour economics from utilization and price. At full utilization the net result equals
-  the locked hedge target; below full it exposes exactly how much is leaking.
-- **Optional, opt-in actions.** A batch position can opt in to pausing its workload on a
-  sustained price spike, and resuming when the price recovers. Off by default. Critical
-  workloads are never touched.
+## Path A — Local demo (mock, free)
 
-## Architecture
-
-```
-  .env / K8s Secret (optional) --> internal/config resolver (auto | mock | live)
-                                          |
-ComputePosition (CRD)                     | selects each source
-        |                                 v
-        v          price     --> mock OCPI service   | real Ornn Data API (token)
-  operator         telemetry --> mock gpuexporter    | Prometheus / DCGM (PROMETHEUS_URL)
-  (controller-     market    --> log-only (advisory) | Ornn marketplace (MARKET_API_URL)
-   runtime)
-        |
-        +--> status + Kubernetes Events
-        +--> Prometheus metrics --> Grafana dashboard + alert rules
-        +--> optional pause/resume of an opted-in Deployment
-        +--> posts idle capacity to the marketplace when sublet flips
-
-  console (read-only) --reads--> ComputePositions + Events + prices + resolved modes
-        |
-        +--> live "trading desk" web UI with a SIMULATED/LIVE badge  (headline surface)
-```
-
-With no configuration every source is the bundled simulator. The moment real Ornn
-credentials appear (in `.env` locally, or a Kubernetes Secret in-cluster) each source
-auto-switches to live and the console badge flips from **SIMULATED DATA** to **LIVE**. No
-code change is required.
-
-- `cmd/operator` — the controller.
-- `cmd/console` — a read-only live control-room web UI (embedded React SPA + small Go API) that reads positions, events, and prices from the cluster. The headline demo surface.
-- `cmd/mockocpi` — a local OCPI price service (mean-reverting prices, spike endpoint for demos).
-- `cmd/gpuexporter` — simulated per-position GPU utilization (dcgm-style), controllable for demos.
-- `internal/hedge` — the basis-risk / hedge-effectiveness math (unit tested).
-- `internal/config` — dependency-free `.env` loader, mode resolution (`auto|mock|live`), and the factories that build each source.
-- `internal/ocpi` — pluggable price source: mock HTTP service or the real Ornn Data API.
-- `internal/telemetry` — utilization source: mock exporter or live Prometheus/DCGM.
-- `internal/market` — marketplace publisher: log-only (advisory) or live HTTP write-back.
-- `internal/console` — state aggregation and rolling history for the console API.
-- `internal/metrics` — Prometheus series.
-
-## Surfaces
-
-- **Compute Hedge Console (headline)** — a bespoke, dark control-room UI: portfolio tiles,
-  a live OCPI ticker, per-position cards with utilization rings, hedge-effectiveness gauges
-  and basis-risk sparklines, and a live event feed. Read-only; served from the cluster.
-- **Grafana (engineer's drill-down)** — the same signals as Prometheus time series, for
-  deeper inspection and alert rules.
-
-## Quickstart (local, free)
-
-Requirements: Docker, kind, kubectl, Go 1.26+. See `docs/PREREQS.md`.
+Requirements: Docker, kind, kubectl, Go 1.26+. See [docs/PREREQS.md](docs/PREREQS.md).
 
 ```powershell
 pwsh -File scripts/demo.ps1
@@ -101,23 +47,133 @@ Then open the headline console:
 kubectl -n compute-hedge-system port-forward svc/console 8090:8090
 ```
 
-The console is at http://localhost:8090.
+Console: http://localhost:8090 (badge shows **SIMULATED DATA**).
 
-For the engineer's drill-down, port-forward Grafana/Prometheus:
+Optional Grafana / Prometheus:
 
 ```bash
 kubectl -n compute-hedge-system port-forward svc/grafana 3000:3000
 kubectl -n compute-hedge-system port-forward svc/prometheus 9090:9090
 ```
 
-Grafana is login-free at http://localhost:3000 and lands directly on the
-"Compute Hedge Operator" dashboard.
-
 Watch positions:
 
 ```bash
 kubectl get computepositions -A -w
 ```
+
+## Path B — Install on your Kubernetes cluster
+
+Installs the **operator only** (CRD + RBAC + Deployment + metrics Service). Mocks and the
+console are not required. For live GPU utilization your cluster should already scrape
+NVIDIA `dcgm-exporter` into Prometheus.
+
+### Using a published image (GHCR)
+
+Images are published to GHCR on version tags (`v*`). First publish needs a GitHub token with
+`workflow` and `packages` scopes when pushing [`.github/workflows/release.yaml`](.github/workflows/release.yaml).
+
+```bash
+helm upgrade --install compute-hedge charts/compute-hedge-operator \
+  --namespace compute-hedge-system --create-namespace \
+  --set image.repository=ghcr.io/namansh70747/compute-hedge-operator \
+  --set image.tag=0.1.0
+```
+
+Or install a packaged chart from a [GitHub Release](https://github.com/namansh70747/compute-hedge-operator/releases) `.tgz`.
+
+### Build-from-source fallback
+
+```bash
+docker build -t <your-registry>/compute-hedge-operator:0.1.0 .
+docker push <your-registry>/compute-hedge-operator:0.1.0
+
+helm upgrade --install compute-hedge charts/compute-hedge-operator \
+  --namespace compute-hedge-system --create-namespace \
+  --set image.repository=<your-registry>/compute-hedge-operator \
+  --set image.tag=0.1.0
+```
+
+Raw manifests (same idea): edit the image in `config/manager.yaml`, then
+`kubectl apply -f config/crd/computepositions.yaml -f config/rbac.yaml -f config/manager.yaml`.
+
+### Go live on Path B
+
+```bash
+cp config/secret.example.yaml config/secret.yaml
+# fill ORNN_API_TOKEN, PROMETHEUS_URL, optional MARKET_* …
+kubectl -n compute-hedge-system apply -f config/secret.yaml
+kubectl -n compute-hedge-system rollout restart deploy/compute-hedge-operator
+```
+
+Or create the Secret via Helm:
+
+```bash
+helm upgrade --install compute-hedge charts/compute-hedge-operator \
+  --namespace compute-hedge-system --create-namespace \
+  --set credentials.create=true \
+  --set credentials.ornnApiToken=<token> \
+  --set credentials.prometheusUrl=http://prometheus.monitoring.svc:9090
+```
+
+Apply positions:
+
+```bash
+kubectl apply -f deploy/samples/computepositions.yaml
+# or your own ComputePosition YAML
+kubectl get computepositions -A -w
+```
+
+Optional console on the same image:
+
+```bash
+# set image in deploy/console.yaml to match your registry/tag, then:
+kubectl apply -f deploy/console.yaml
+kubectl -n compute-hedge-system port-forward svc/console 8090:8090
+```
+
+## Architecture
+
+```
+  .env / K8s Secret (optional) --> internal/config resolver (auto | mock | live)
+                                          |
+ComputePosition (CRD)                     | selects each source
+        |                                 v
+        v          price     --> mock OCPI service   | real Ornn Data API (token)
+  operator         telemetry --> mock gpuexporter    | Prometheus / DCGM (PROMETHEUS_URL)
+  (controller-     market    --> log-only (advisory) | marketplace HTTP (MARKET_API_URL)
+   runtime)
+        |
+        +--> status + Kubernetes Events
+        +--> Prometheus metrics --> Grafana (demo) / your scrape config
+        +--> optional pause/resume of an opted-in Deployment
+        +--> posts idle capacity when sublet flips (write-gated)
+
+  console (read-only) --reads--> ComputePositions + Events + same price source as operator
+        |
+        +--> trading-desk UI with SIMULATED / LIVE badge
+```
+
+## Environment knobs
+
+Each source resolves independently: `auto` = live when its credentials/URL are present,
+otherwise mock. Full reference in [`.env.example`](.env.example).
+
+| Variable | Purpose | Blank → filled |
+| --- | --- | --- |
+| `OCPI_MODE` / `TELEMETRY_MODE` / `MARKET_MODE` | per-source mode (`auto\|mock\|live`) | `auto` |
+| `ORNN_API_TOKEN` | Ornn Data API token | mock prices → live OCPI |
+| `ORNN_API_BASE_URL`, `ORNN_API_PRICE_PATH` | live price endpoint (`{sku}` substituted) | — |
+| `PROMETHEUS_URL` | Prometheus base URL | mock exporter → live DCGM |
+| `TELEMETRY_QUERY` | PromQL (`{position}`, `{namespace}`) | default DCGM avg query |
+| `MARKET_API_URL`, `MARKET_API_PATH` | marketplace endpoint | advisory → live supply |
+| `MARKET_WRITE_ENABLED` | safety switch | `false`; must be `true` to post |
+| `AUTH_SCHEME`, `AUTH_HEADER` | shared auth for marketplace HTTP | `Bearer`, `Authorization` |
+
+Marketplace write-back never posts unless both `MARKET_API_URL` is set and
+`MARKET_WRITE_ENABLED=true`.
+
+Local flip on the kind demo: `cp .env.example .env`, fill tokens, `make live` / `make mock`.
 
 ## Metrics
 
@@ -131,47 +187,20 @@ kubectl get computepositions -A -w
 | `chp_idle_gpu_count` | Idle GPUs in a position |
 | `chp_available_for_sublet` | 1 when idle capacity is flagged for the secondary market |
 
-## Go live in 60 seconds
+## Security
 
-Every external dependency is pluggable. Blank config runs the mock prototype; real
-credentials flip it to live with no code change.
-
-In-cluster (the demo cluster is already running):
-
-```bash
-cp .env.example .env         # fill in ORNN_API_TOKEN (and optionally PROMETHEUS_URL / MARKET_API_URL)
-make live                    # builds the ornn-credentials Secret from .env and restarts both pods
-```
-
-Watch the console header flip from **SIMULATED DATA** to **LIVE - api.ornnai.com**, and the
-provenance strip show the real endpoints. Roll back any time with `make mock`.
-
-Local dev (no cluster): `make run-operator` and `make run-console` both read `.env` from the
-working directory automatically.
-
-### Environment knobs
-
-Each source resolves independently: `auto` = live when its credentials/URL are present,
-otherwise mock. `mock` and `live` force the choice. Full reference in `.env.example`.
-
-| Variable | Purpose | Blank (mock) → filled (live) |
-| --- | --- | --- |
-| `OCPI_MODE` / `TELEMETRY_MODE` / `MARKET_MODE` | per-source mode | `auto` |
-| `ORNN_API_TOKEN` | Ornn Data API token | mock prices → live OCPI index |
-| `ORNN_API_BASE_URL`, `ORNN_API_PRICE_PATH` | live price endpoint | — |
-| `PROMETHEUS_URL` | Prometheus base URL | mock exporter → live DCGM |
-| `TELEMETRY_QUERY` | PromQL template (`{position}`, `{namespace}`) | `avg(DCGM_FI_DEV_GPU_UTIL{position="{position}"})` |
-| `MARKET_API_URL`, `MARKET_API_PATH` | marketplace endpoint | advisory → live supply posting |
-| `MARKET_WRITE_ENABLED` | safety switch for posting | `false`; must be `true` to post |
-| `AUTH_SCHEME`, `AUTH_HEADER` | shared auth for every live client | `Bearer`, `Authorization` |
-
-Marketplace write-back never posts anything unless both `MARKET_API_URL` is set and
-`MARKET_WRITE_ENABLED=true`. Live adapters degrade gracefully to last-known/mock on error,
-so a flaky endpoint never hard-fails the demo.
+Least-privilege RBAC: the operator can get/list/watch/update/patch Deployments (for optional
+pause/resume) but **cannot create or delete** them. Pod runs non-root, read-only root
+filesystem, all capabilities dropped. Distroless image.
 
 ## Docs
 
-- `docs/PITCH.md` — the problem, the value, and the trade-offs.
-- `docs/DEMO_SCRIPT.md` — the live walkthrough.
-- `docs/QA.md` — anticipated questions and answers.
-- `docs/PREREQS.md` — prerequisites and cost.
+- [docs/PITCH.md](docs/PITCH.md) — problem, value, trade-offs
+- [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) — live walkthrough
+- [docs/QA.md](docs/QA.md) — anticipated questions
+- [docs/PREREQS.md](docs/PREREQS.md) — tools for Path A vs Path B
+- [docs/MASTERCLASS.md](docs/MASTERCLASS.md) — deep project walkthrough
+
+## License
+
+MIT © 2026 Naman Sharma. See [LICENSE](LICENSE).

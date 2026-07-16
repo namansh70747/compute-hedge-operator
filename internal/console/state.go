@@ -122,8 +122,6 @@ func (b *Builder) Build(ctx context.Context) (State, error) {
 		return State{}, err
 	}
 
-	priceMap, _ := b.prices.Fetch(ctx)
-
 	state := State{
 		AsOf:        time.Now().UTC().Format(time.RFC3339),
 		Cluster:     b.cluster,
@@ -133,11 +131,13 @@ func (b *Builder) Build(ctx context.Context) (State, error) {
 	var pf Portfolio
 	pf.Positions = len(list.Items)
 	statusPrices := map[string]float64{}
+	skus := make([]string, 0, len(list.Items))
 
 	for i := range list.Items {
 		pos := &list.Items[i]
 		view := b.buildPosition(pos)
 		state.Positions = append(state.Positions, view)
+		skus = append(skus, view.SKU)
 
 		if view.SpotUSDPerHour > 0 {
 			statusPrices[view.SKU] = view.SpotUSDPerHour
@@ -152,6 +152,7 @@ func (b *Builder) Build(ctx context.Context) (State, error) {
 		}
 	}
 
+	priceMap, _ := b.prices.Fetch(ctx, skus)
 	state.Prices = b.buildPrices(priceMap, statusPrices)
 
 	sort.Slice(state.Positions, func(i, j int) bool {
