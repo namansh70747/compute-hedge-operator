@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	computev1alpha1 "github.com/namansh70747/compute-hedge-operator/api/v1alpha1"
+	"github.com/namansh70747/compute-hedge-operator/internal/config"
 )
 
 const (
@@ -83,12 +84,13 @@ type EventView struct {
 
 // State is the full payload served to the console UI.
 type State struct {
-	AsOf      string         `json:"asOf"`
-	Cluster   string         `json:"cluster"`
-	Portfolio Portfolio      `json:"portfolio"`
-	Prices    []PriceView    `json:"prices"`
-	Positions []PositionView `json:"positions"`
-	Events    []EventView    `json:"events"`
+	AsOf        string         `json:"asOf"`
+	Cluster     string         `json:"cluster"`
+	DataSources config.Sources `json:"dataSources"`
+	Portfolio   Portfolio      `json:"portfolio"`
+	Prices      []PriceView    `json:"prices"`
+	Positions   []PositionView `json:"positions"`
+	Events      []EventView    `json:"events"`
 }
 
 // Builder assembles State from the cluster and price feed.
@@ -96,16 +98,18 @@ type Builder struct {
 	client     client.Client
 	prices     PriceFetcher
 	cluster    string
+	sources    config.Sources
 	hist       *Store
 	prevPrices map[string]float64
 }
 
 // NewBuilder constructs a Builder.
-func NewBuilder(c client.Client, prices PriceFetcher, cluster string) *Builder {
+func NewBuilder(c client.Client, prices PriceFetcher, cluster string, sources config.Sources) *Builder {
 	return &Builder{
 		client:     c,
 		prices:     prices,
 		cluster:    cluster,
+		sources:    sources,
 		hist:       NewStore(historyPoints),
 		prevPrices: map[string]float64{},
 	}
@@ -121,18 +125,23 @@ func (b *Builder) Build(ctx context.Context) (State, error) {
 	priceMap, _ := b.prices.Fetch(ctx)
 
 	state := State{
-		AsOf:    time.Now().UTC().Format(time.RFC3339),
-		Cluster: b.cluster,
-		Prices:  b.buildPrices(priceMap),
+		AsOf:        time.Now().UTC().Format(time.RFC3339),
+		Cluster:     b.cluster,
+		DataSources: b.sources,
 	}
 
 	var pf Portfolio
 	pf.Positions = len(list.Items)
+	statusPrices := map[string]float64{}
 
 	for i := range list.Items {
 		pos := &list.Items[i]
 		view := b.buildPosition(pos)
 		state.Positions = append(state.Positions, view)
+
+		if view.SpotUSDPerHour > 0 {
+			statusPrices[view.SKU] = view.SpotUSDPerHour
+		}
 
 		pf.HedgedNotionalUSDPerHour += view.HedgedUSDPerHour * float64(view.GPUCount)
 		pf.HedgePnLUSDPerHour += view.HedgePnLUSDPerHour
@@ -142,6 +151,8 @@ func (b *Builder) Build(ctx context.Context) (State, error) {
 			pf.MarketplaceSupplyUSDPerHour += float64(view.IdleGPUCount) * view.SpotUSDPerHour
 		}
 	}
+
+	state.Prices = b.buildPrices(priceMap, statusPrices)
 
 	sort.Slice(state.Positions, func(i, j int) bool {
 		return state.Positions[i].Name < state.Positions[j].Name
@@ -163,9 +174,20 @@ func (b *Builder) Build(ctx context.Context) (State, error) {
 	return state, nil
 }
 
-func (b *Builder) buildPrices(priceMap map[string]float64) []PriceView {
-	prices := make([]PriceView, 0, len(priceMap))
-	for sku, price := range priceMap {
+// buildPrices merges prices derived from position status (authoritative in every mode)
+// with any prices fetched directly from the price service (which enriches the mock demo
+// with SKUs that have no position). Fetched values win when both are present.
+func (b *Builder) buildPrices(fetched, statusPrices map[string]float64) []PriceView {
+	merged := make(map[string]float64, len(fetched)+len(statusPrices))
+	for sku, p := range statusPrices {
+		merged[sku] = p
+	}
+	for sku, p := range fetched {
+		merged[sku] = p
+	}
+
+	prices := make([]PriceView, 0, len(merged))
+	for sku, price := range merged {
 		change := 0.0
 		if prev, ok := b.prevPrices[sku]; ok && prev > 0 {
 			change = (price - prev) / prev * 100
@@ -173,8 +195,8 @@ func (b *Builder) buildPrices(priceMap map[string]float64) []PriceView {
 		prices = append(prices, PriceView{SKU: sku, USDPerHour: price, ChangePct: round2(change)})
 	}
 	sort.Slice(prices, func(i, j int) bool { return prices[i].SKU < prices[j].SKU })
-	if len(priceMap) > 0 {
-		b.prevPrices = priceMap
+	if len(merged) > 0 {
+		b.prevPrices = merged
 	}
 	return prices
 }

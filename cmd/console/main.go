@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	computev1alpha1 "github.com/namansh70747/compute-hedge-operator/api/v1alpha1"
+	"github.com/namansh70747/compute-hedge-operator/internal/config"
 	"github.com/namansh70747/compute-hedge-operator/internal/console"
 )
 
@@ -34,17 +35,23 @@ func init() {
 
 func main() {
 	addr := envDefault("LISTEN_ADDR", ":8090")
+	appCfg := config.Load()
 	priceURL := envDefault("OCPI_URL", "http://mockocpi:8080")
-	cluster := envDefault("CLUSTER_NAME", "kind-compute-hedge")
-	interval := envDuration("POLL_INTERVAL", 2*time.Second)
+	interval := appCfg.PollInterval
 
-	cfg := ctrl.GetConfigOrDie()
-	c, err := client.New(cfg, client.Options{Scheme: scheme})
+	restCfg := ctrl.GetConfigOrDie()
+	c, err := client.New(restCfg, client.Options{Scheme: scheme})
 	if err != nil {
 		log.Fatalf("build client: %v", err)
 	}
 
-	builder := console.NewBuilder(c, console.NewHTTPPrices(priceURL), cluster)
+	sources := appCfg.Sources()
+	log.Printf("console data sources: price=%s/%s telemetry=%s/%s market=%s/%s",
+		sources.Price.Mode, sources.Price.Label,
+		sources.Telemetry.Mode, sources.Telemetry.Label,
+		sources.Market.Mode, sources.Market.Label)
+
+	builder := console.NewBuilder(c, console.NewHTTPPrices(priceURL), appCfg.Cluster, sources)
 
 	var (
 		mu     sync.RWMutex
@@ -91,7 +98,7 @@ func main() {
 	})
 	mux.HandleFunc("/", spaHandler(dist, fileServer))
 
-	log.Printf("console listening on %s (prices=%s, cluster=%s)", addr, priceURL, cluster)
+	log.Printf("console listening on %s (prices=%s, cluster=%s)", addr, priceURL, appCfg.Cluster)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -125,15 +132,6 @@ func serveIndex(w http.ResponseWriter, index []byte) {
 func envDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
-	}
-	return fallback
-}
-
-func envDuration(key string, fallback time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
 	}
 	return fallback
 }

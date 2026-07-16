@@ -12,10 +12,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	computev1alpha1 "github.com/namansh70747/compute-hedge-operator/api/v1alpha1"
+	"github.com/namansh70747/compute-hedge-operator/internal/config"
 	"github.com/namansh70747/compute-hedge-operator/internal/controller"
 	"github.com/namansh70747/compute-hedge-operator/internal/metrics"
-	"github.com/namansh70747/compute-hedge-operator/internal/ocpi"
-	"github.com/namansh70747/compute-hedge-operator/internal/telemetry"
 )
 
 var scheme = runtime.NewScheme()
@@ -28,6 +27,13 @@ func init() {
 func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	setupLog := ctrl.Log.WithName("setup")
+
+	cfg := config.Load()
+	src := cfg.Sources()
+	setupLog.Info("resolved data sources",
+		"price", src.Price.Mode, "priceLabel", src.Price.Label,
+		"telemetry", src.Telemetry.Mode, "telemetryLabel", src.Telemetry.Label,
+		"market", src.Market.Mode, "marketLabel", src.Market.Label)
 
 	metrics.Register()
 
@@ -44,8 +50,9 @@ func main() {
 	reconciler := &controller.ComputePositionReconciler{
 		Client:    mgr.GetClient(),
 		Recorder:  mgr.GetEventRecorderFor("computeposition-controller"),
-		OCPI:      buildOCPISource(),
-		Telemetry: telemetry.NewHTTPSource(envDefault("GPU_EXPORTER_URL", "http://gpuexporter:8081")),
+		OCPI:      cfg.BuildOCPISource(),
+		Telemetry: cfg.BuildTelemetrySource(),
+		Market:    cfg.BuildMarketPublisher(),
 	}
 	if err := reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller")
@@ -66,18 +73,6 @@ func main() {
 		setupLog.Error(err, "manager exited with error")
 		os.Exit(1)
 	}
-}
-
-// buildOCPISource selects the real Ornn Data API when configured, otherwise the mock service.
-func buildOCPISource() ocpi.Source {
-	if os.Getenv("OCPI_MODE") == "ornn" {
-		return ocpi.NewOrnnDataSource(ocpi.OrnnDataConfig{
-			BaseURL:   envDefault("ORNN_API_BASE_URL", "https://api.ornnai.com"),
-			Token:     os.Getenv("ORNN_API_TOKEN"),
-			PricePath: os.Getenv("ORNN_API_PRICE_PATH"),
-		})
-	}
-	return ocpi.NewHTTPSource(envDefault("OCPI_URL", "http://mockocpi:8080"))
 }
 
 func envDefault(key, fallback string) string {

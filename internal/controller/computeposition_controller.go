@@ -19,6 +19,7 @@ import (
 
 	computev1alpha1 "github.com/namansh70747/compute-hedge-operator/api/v1alpha1"
 	"github.com/namansh70747/compute-hedge-operator/internal/hedge"
+	"github.com/namansh70747/compute-hedge-operator/internal/market"
 	"github.com/namansh70747/compute-hedge-operator/internal/metrics"
 	"github.com/namansh70747/compute-hedge-operator/internal/ocpi"
 	"github.com/namansh70747/compute-hedge-operator/internal/telemetry"
@@ -38,6 +39,7 @@ type ComputePositionReconciler struct {
 	Recorder  record.EventRecorder
 	OCPI      ocpi.Source
 	Telemetry telemetry.Source
+	Market    market.Publisher
 }
 
 // +kubebuilder:rbac:groups=computehedge.dev,resources=computepositions,verbs=get;list;watch;create;update;patch;delete
@@ -89,8 +91,11 @@ func (r *ComputePositionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		HedgedPriceUSD: hedgedPrice,
 	})
 
+	wasAvailable := pos.Status.AvailableForSublet
 	availableForSublet := r.evaluateIdle(&pos, util)
 	recommendation := buildRecommendation(res, priceStale)
+
+	r.handleMarketplace(ctx, &pos, wasAvailable, availableForSublet, res.IdleGPUs, price.USDPerHour)
 
 	if err := r.applyOptionalAction(ctx, &pos, price.USDPerHour); err != nil {
 		l.Info("optional action failed", "error", err.Error())
@@ -136,6 +141,49 @@ func (r *ComputePositionReconciler) evaluateIdle(pos *computev1alpha1.ComputePos
 		return false
 	}
 	return pos.Status.AvailableForSublet
+}
+
+// handleMarketplace posts or withdraws idle capacity as a position's sublet flag flips.
+// With the mock publisher this only records the offer locally and emits an Event; with a
+// configured live publisher it posts to the real marketplace. Failures never block a
+// reconcile.
+func (r *ComputePositionReconciler) handleMarketplace(
+	ctx context.Context,
+	pos *computev1alpha1.ComputePosition,
+	wasAvailable, nowAvailable bool,
+	idleGPUs, spot float64,
+) {
+	if r.Market == nil {
+		return
+	}
+	id := pos.Namespace + "/" + pos.Name
+
+	switch {
+	case nowAvailable && !wasAvailable:
+		offer := market.Offer{
+			ID:              id,
+			Position:        pos.Name,
+			Namespace:       pos.Namespace,
+			SKU:             pos.Spec.SKU,
+			GPUCount:        int(idleGPUs + 0.5),
+			PriceUSDPerHour: spot,
+			AsOf:            time.Now(),
+		}
+		if err := r.Market.PublishSupply(ctx, offer); err != nil {
+			r.Recorder.Eventf(pos, "Warning", "MarketplaceError", "failed to post supply: %v", err)
+			return
+		}
+		r.Recorder.Eventf(pos, "Normal", "MarketplaceSupplyPosted",
+			"posted %d idle %s GPUs to the marketplace at %.2f/GPU-hr", offer.GPUCount, offer.SKU, spot)
+
+	case !nowAvailable && wasAvailable:
+		if err := r.Market.WithdrawSupply(ctx, id); err != nil {
+			r.Recorder.Eventf(pos, "Warning", "MarketplaceError", "failed to withdraw supply: %v", err)
+			return
+		}
+		r.Recorder.Eventf(pos, "Normal", "MarketplaceSupplyWithdrawn",
+			"utilization recovered; withdrew %s supply from the marketplace", pos.Spec.SKU)
+	}
 }
 
 // applyOptionalAction pauses or resumes the referenced batch workload, but only when
