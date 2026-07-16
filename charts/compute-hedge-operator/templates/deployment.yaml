@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chp.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chp.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "chp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chp.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "chp.name" . }}
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: operator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/operator"]
+          env:
+            - name: OCPI_MODE
+              value: {{ .Values.ocpi.mode | quote }}
+            - name: OCPI_URL
+              value: {{ .Values.ocpi.url | quote }}
+            - name: ORNN_API_BASE_URL
+              value: {{ .Values.ornn.baseUrl | quote }}
+            - name: ORNN_API_TOKEN
+              value: {{ .Values.ornn.token | quote }}
+            - name: ORNN_API_PRICE_PATH
+              value: {{ .Values.ornn.pricePath | quote }}
+            - name: GPU_EXPORTER_URL
+              value: {{ .Values.gpuExporterUrl | quote }}
+            - name: METRICS_ADDR
+              value: {{ .Values.metricsAddr | quote }}
+            - name: HEALTH_ADDR
+              value: {{ .Values.healthAddr | quote }}
+          ports:
+            - name: metrics
+              containerPort: 8082
+            - name: health
+              containerPort: 8083
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chp.name" . }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "chp.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "chp.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: 8082
+      targetPort: metrics

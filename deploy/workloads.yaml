@@ -1,0 +1,45 @@
+# Placeholder GPU workloads. On a real cluster these would request nvidia.com/gpu;
+# here they stand in as pause/resume targets and dashboard series.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: training-cluster
+  namespace: default
+  labels:
+    app: training-cluster
+    workload-type: critical
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: training-cluster
+  template:
+    metadata:
+      labels:
+        app: training-cluster
+    spec:
+      containers:
+        - name: workload
+          image: registry.k8s.io/pause:3.10
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: batch-render
+  namespace: default
+  labels:
+    app: batch-render
+    workload-type: batch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: batch-render
+  template:
+    metadata:
+      labels:
+        app: batch-render
+    spec:
+      containers:
+        - name: workload
+          image: registry.k8s.io/pause:3.10

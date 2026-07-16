@@ -1,0 +1,29 @@
+replicaCount: 1
+
+image:
+  repository: compute-hedge-operator
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# Price source: "mock" uses the bundled mock service, "ornn" uses the real Ornn Data API.
+ocpi:
+  mode: mock
+  url: http://mockocpi.compute-hedge-system.svc:8080
+
+ornn:
+  baseUrl: https://api.ornnai.com
+  token: ""
+  pricePath: ""
+
+gpuExporterUrl: http://gpuexporter.compute-hedge-system.svc:8081
+
+metricsAddr: ":8082"
+healthAddr: ":8083"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi

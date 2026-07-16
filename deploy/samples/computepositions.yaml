@@ -1,0 +1,32 @@
+# A critical position: never paused. Used to show live hedge P&L and basis risk.
+apiVersion: computehedge.dev/v1alpha1
+kind: ComputePosition
+metadata:
+  name: training-cluster
+  namespace: default
+spec:
+  sku: H100
+  gpuCount: 8
+  hedgedPriceUSDPerHour: "2.50"
+  priority: critical
+  idleThresholdPct: 15
+  idleWindowSeconds: 20
+---
+# A batch position that opts in to the pause/resume action on a sustained price spike.
+apiVersion: computehedge.dev/v1alpha1
+kind: ComputePosition
+metadata:
+  name: batch-render
+  namespace: default
+spec:
+  sku: H200
+  gpuCount: 4
+  hedgedPriceUSDPerHour: "3.00"
+  priority: batch
+  idleThresholdPct: 15
+  idleWindowSeconds: 20
+  enableActions: true
+  maxSpotPriceUSDPerHour: "3.60"
+  workloadRef:
+    namespace: default
+    name: batch-render

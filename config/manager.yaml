@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: compute-hedge-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compute-hedge-operator
+  namespace: compute-hedge-system
+  labels:
+    app: compute-hedge-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: compute-hedge-operator
+  template:
+    metadata:
+      labels:
+        app: compute-hedge-operator
+    spec:
+      serviceAccountName: compute-hedge-operator
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: operator
+          image: compute-hedge-operator:dev
+          imagePullPolicy: IfNotPresent
+          command: ["/operator"]
+          env:
+            - name: OCPI_MODE
+              value: "mock"
+            - name: OCPI_URL
+              value: "http://mockocpi.compute-hedge-system.svc:8080"
+            - name: GPU_EXPORTER_URL
+              value: "http://gpuexporter.compute-hedge-system.svc:8081"
+            - name: METRICS_ADDR
+              value: ":8082"
+            - name: HEALTH_ADDR
+              value: ":8083"
+          ports:
+            - name: metrics
+              containerPort: 8082
+            - name: health
+              containerPort: 8083
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute-hedge-operator-metrics
+  namespace: compute-hedge-system
+  labels:
+    app: compute-hedge-operator
+spec:
+  selector:
+    app: compute-hedge-operator
+  ports:
+    - name: metrics
+      port: 8082
+      targetPort: metrics

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: compute-hedge-operator
+description: Advisory operator that tracks hedged GPU positions against the OCPI index.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

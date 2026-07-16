@@ -1,0 +1,74 @@
+{
+  "uid": "compute-hedge",
+  "title": "Compute Hedge Operator",
+  "tags": ["compute-hedge", "ornn"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Idle capacity flagged for sublet (positions)",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 } ] } } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(chp_available_for_sublet)", "legendFormat": "positions idle" }
+      ]
+    },
+    {
+      "type": "gauge",
+      "title": "Hedge effectiveness (%)",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "min": 0, "max": 100, "unit": "percent", "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 60 }, { "color": "green", "value": 85 } ] } } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "chp_hedge_effectiveness_pct", "legendFormat": "{{position}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Idle GPUs by position",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "chp_idle_gpu_count", "legendFormat": "{{position}} ({{sku}})" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "OCPI spot price by SKU (USD/GPU-hr)",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "ocpi_price_usd_per_gpu_hour", "legendFormat": "{{sku}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU utilization by position (%)",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "chp_gpu_utilization_pct", "legendFormat": "{{position}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Hedge P&L by position (USD/hr)",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "chp_hedge_pnl_usd_per_hour", "legendFormat": "{{position}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Basis risk by position (USD/hr)",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "custom": { "fillOpacity": 20 } } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "chp_basis_risk_usd_per_hour", "legendFormat": "{{position}}" }
+      ]
+    }
+  ]
+}

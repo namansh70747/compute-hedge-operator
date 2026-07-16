@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: compute-hedge-system
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+    rule_files:
+      - /etc/prometheus/rules/alerts.yml
+    scrape_configs:
+      - job_name: operator
+        static_configs:
+          - targets: ["compute-hedge-operator-metrics.compute-hedge-system.svc:8082"]
+      - job_name: mockocpi
+        static_configs:
+          - targets: ["mockocpi.compute-hedge-system.svc:8080"]
+      - job_name: gpuexporter
+        static_configs:
+          - targets: ["gpuexporter.compute-hedge-system.svc:8081"]
+  alerts.yml: |
+    groups:
+      - name: compute-hedge
+        rules:
+          - alert: IdleCapacityAvailable
+            expr: chp_available_for_sublet == 1
+            for: 15s
+            labels:
+              severity: info
+            annotations:
+              summary: "Idle GPU capacity available for the secondary market"
+              description: "Position {{ $labels.position }} ({{ $labels.sku }}) has idle capacity that can be sublet."
+          - alert: HighBasisRisk
+            expr: chp_basis_risk_usd_per_hour > 5
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "Basis risk above threshold"
+              description: "Position {{ $labels.position }} is leaking more than $5/hr between its index hedge and real utilization."
+          - alert: LowHedgeEffectiveness
+            expr: chp_hedge_effectiveness_pct < 60
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: "Hedge effectiveness low"
+              description: "Position {{ $labels.position }} net economics are below 60% of the locked hedge target."
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: compute-hedge-system
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.6.0
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+            items:
+              - key: prometheus.yml
+                path: prometheus.yml
+        - name: rules
+          configMap:
+            name: prometheus-config
+            items:
+              - key: alerts.yml
+                path: alerts.yml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: compute-hedge-system
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http

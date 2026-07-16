@@ -1,0 +1,132 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: computepositions.computehedge.dev
+spec:
+  group: computehedge.dev
+  scope: Namespaced
+  names:
+    kind: ComputePosition
+    listKind: ComputePositionList
+    plural: computepositions
+    singular: computeposition
+    shortNames:
+      - cpos
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: SKU
+          type: string
+          jsonPath: .spec.sku
+        - name: GPUs
+          type: integer
+          jsonPath: .spec.gpuCount
+        - name: Util%
+          type: integer
+          jsonPath: .status.utilizationPct
+        - name: Spot
+          type: string
+          jsonPath: .status.spotPriceUSDPerHour
+        - name: PnL/hr
+          type: string
+          jsonPath: .status.hedgePnLUSDPerHour
+        - name: BasisRisk/hr
+          type: string
+          jsonPath: .status.basisRiskUSDPerHour
+        - name: Sublet
+          type: boolean
+          jsonPath: .status.availableForSublet
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - sku
+                - gpuCount
+                - hedgedPriceUSDPerHour
+              properties:
+                sku:
+                  type: string
+                gpuCount:
+                  type: integer
+                  format: int32
+                  minimum: 1
+                hedgedPriceUSDPerHour:
+                  type: string
+                priority:
+                  type: string
+                  enum: ["critical", "batch"]
+                idleThresholdPct:
+                  type: integer
+                  format: int32
+                  minimum: 0
+                  maximum: 100
+                idleWindowSeconds:
+                  type: integer
+                  format: int32
+                  minimum: 0
+                enableActions:
+                  type: boolean
+                maxSpotPriceUSDPerHour:
+                  type: string
+                workloadRef:
+                  type: object
+                  required:
+                    - namespace
+                    - name
+                  properties:
+                    namespace:
+                      type: string
+                    name:
+                      type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                utilizationPct:
+                  type: integer
+                  format: int32
+                spotPriceUSDPerHour:
+                  type: string
+                spotCostUSDPerHour:
+                  type: string
+                hedgePnLUSDPerHour:
+                  type: string
+                hedgeEffectivenessPct:
+                  type: integer
+                  format: int32
+                basisRiskUSDPerHour:
+                  type: string
+                idleGPUCount:
+                  type: integer
+                  format: int32
+                availableForSublet:
+                  type: boolean
+                recommendation:
+                  type: string
+                priceStale:
+                  type: boolean
+                idleSince:
+                  type: string
+                  format: date-time
+                  nullable: true
+                paused:
+                  type: boolean
+                originalReplicas:
+                  type: integer
+                  format: int32
+                  nullable: true
+                lastUpdated:
+                  type: string
+                  format: date-time
+                  nullable: true

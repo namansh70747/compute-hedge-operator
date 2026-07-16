@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mockocpi
+  namespace: compute-hedge-system
+  labels:
+    app: mockocpi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mockocpi
+  template:
+    metadata:
+      labels:
+        app: mockocpi
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: mockocpi
+          image: compute-hedge-operator:dev
+          imagePullPolicy: IfNotPresent
+          command: ["/mockocpi"]
+          env:
+            - name: LISTEN_ADDR
+              value: ":8080"
+            - name: TICK_INTERVAL
+              value: "2s"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mockocpi
+  namespace: compute-hedge-system
+  labels:
+    app: mockocpi
+spec:
+  selector:
+    app: mockocpi
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
