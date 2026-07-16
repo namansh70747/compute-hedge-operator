@@ -60,6 +60,9 @@ spec:
               value: "true"
             - name: GF_SECURITY_ADMIN_PASSWORD
               value: "admin"
+            # Land straight on the provisioned dashboard, no navigation needed.
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: "/var/lib/grafana/dashboards/compute-hedge.json"
           ports:
             - name: http
               containerPort: 3000
