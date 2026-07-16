@@ -1,17 +1,19 @@
 import type { Portfolio } from "../api";
 import { usd, signedUsd, usdCompact } from "../lib/format";
 import Sparkline from "./Sparkline";
+import AnimatedNumber from "./AnimatedNumber";
 
 interface TileProps {
   label: string;
-  value: string;
+  value: number;
+  format: (v: number) => string;
   accent: string;
   data: number[];
   hint?: string;
   valueClass?: string;
 }
 
-function Tile({ label, value, accent, data, hint, valueClass }: TileProps) {
+function Tile({ label, value, format, accent, data, hint, valueClass }: TileProps) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur">
       <div
@@ -26,11 +28,11 @@ function Tile({ label, value, accent, data, hint, valueClass }: TileProps) {
           <span className="text-[11px] font-medium text-slate-400">{hint}</span>
         )}
       </div>
-      <div
-        className={`tabular mt-2 font-mono text-2xl font-semibold leading-none ${valueClass ?? "text-slate-50"}`}
-      >
-        {value}
-      </div>
+      <AnimatedNumber
+        value={value}
+        format={format}
+        className={`tabular mt-2 block font-mono text-2xl font-semibold leading-none ${valueClass ?? "text-slate-50"}`}
+      />
       <div className="mt-3 h-9">
         <Sparkline data={data} color={accent} width={220} height={36} />
       </div>
@@ -44,34 +46,39 @@ export default function PortfolioBar({ portfolio }: { portfolio: Portfolio }) {
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
       <Tile
         label="Hedged notional"
-        value={`${usdCompact(portfolio.hedgedNotionalUSDPerHour)}/hr`}
+        value={portfolio.hedgedNotionalUSDPerHour}
+        format={(v) => `${usdCompact(v)}/hr`}
         accent="#38bdf8"
         data={portfolio.history.notional}
         hint={`${portfolio.positions} positions`}
       />
       <Tile
         label="Hedge P&L"
-        value={`${signedUsd(pnl)}/hr`}
+        value={pnl}
+        format={(v) => `${signedUsd(v)}/hr`}
         accent={pnl >= 0 ? "#34d399" : "#fb7185"}
         valueClass={pnl >= 0 ? "text-emerald-300" : "text-rose-300"}
         data={portfolio.history.hedgePnL}
       />
       <Tile
         label="Basis risk"
-        value={`${usd(portfolio.basisRiskUSDPerHour)}/hr`}
+        value={portfolio.basisRiskUSDPerHour}
+        format={(v) => `${usd(v)}/hr`}
         accent="#fbbf24"
         data={portfolio.history.basisRisk}
       />
       <Tile
         label="Idle GPUs for sublet"
-        value={`${portfolio.idleGPUsAvailable}`}
+        value={portfolio.idleGPUsAvailable}
+        format={(v) => `${Math.round(v)}`}
         accent="#a78bfa"
-        data={portfolio.history.supply.map((v) => v)}
+        data={portfolio.history.supply}
         hint="available"
       />
       <Tile
         label="Marketplace supply"
-        value={`${usdCompact(portfolio.marketplaceSupplyUSDPerHour)}/hr`}
+        value={portfolio.marketplaceSupplyUSDPerHour}
+        format={(v) => `${usdCompact(v)}/hr`}
         accent="#22d3ee"
         data={portfolio.history.supply}
         hint="reclaimable"

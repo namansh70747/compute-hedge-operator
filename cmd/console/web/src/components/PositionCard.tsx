@@ -79,7 +79,35 @@ function Metric({
   );
 }
 
-export default function PositionCard({ pos }: { pos: PositionView }) {
+interface PositionCardProps {
+  pos: PositionView;
+  telemetryMode?: "mock" | "live";
+  priceMode?: "mock" | "live";
+}
+
+function SourceChip({ label, mode }: { label: string; mode?: "mock" | "live" }) {
+  const live = mode === "live";
+  const color = live ? "#34d399" : "#64748b";
+  return (
+    <span
+      className="flex items-center gap-1 rounded border border-white/5 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+      style={{ color: live ? "#a7f3d0" : "#94a3b8" }}
+      title={`${label}: ${live ? "live" : "simulated"}`}
+    >
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ backgroundColor: color }}
+      />
+      {label}
+    </span>
+  );
+}
+
+export default function PositionCard({
+  pos,
+  telemetryMode,
+  priceMode,
+}: PositionCardProps) {
   const style = phaseStyle(pos.phase);
   const pnlPositive = pos.hedgePnLUSDPerHour >= 0;
   const spotDelta = pos.spotUSDPerHour - pos.hedgedUSDPerHour;
@@ -112,7 +140,7 @@ export default function PositionCard({ pos }: { pos: PositionView }) {
               </span>
             )}
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
             <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-slate-300">
               {pos.sku}
             </span>
@@ -120,6 +148,8 @@ export default function PositionCard({ pos }: { pos: PositionView }) {
             {pos.priceStale && (
               <span className="text-amber-400">· price stale</span>
             )}
+            <SourceChip label="util" mode={telemetryMode} />
+            <SourceChip label="px" mode={priceMode} />
           </div>
         </div>
         <span

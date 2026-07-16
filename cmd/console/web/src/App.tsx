@@ -4,6 +4,9 @@ import PortfolioBar from "./components/PortfolioBar";
 import PriceTicker from "./components/PriceTicker";
 import PositionCard from "./components/PositionCard";
 import EventFeed from "./components/EventFeed";
+import MarketPanel from "./components/MarketPanel";
+import { ModePill, ProvenanceStrip } from "./components/DataMode";
+import { relTime } from "./lib/format";
 
 type Conn = "connecting" | "live" | "stale";
 
@@ -32,8 +35,7 @@ function Brand() {
       </div>
       <div>
         <h1 className="text-lg font-semibold leading-tight text-slate-50">
-          Compute Hedge{" "}
-          <span className="text-cyan-300">Console</span>
+          Compute Hedge <span className="text-cyan-300">Console</span>
         </h1>
         <p className="text-[11px] uppercase tracking-widest text-slate-500">
           GPU hedge risk · live from the cluster
@@ -81,45 +83,53 @@ export default function App() {
   return (
     <div className="min-h-full">
       <div className="grid-overlay">
-        <div className="mx-auto max-w-[1600px] px-5 pb-10 pt-5">
-          <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 backdrop-blur">
-            <Brand />
-            <div className="flex items-center gap-6">
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                  Cluster
+        <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col px-5 pb-6 pt-5">
+          <header className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 backdrop-blur">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <Brand />
+              <div className="flex items-center gap-4">
+                {state && <ModePill sources={state.dataSources} />}
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                    Cluster
+                  </div>
+                  <div className="font-mono text-sm text-slate-200">
+                    {state?.cluster ?? "—"}
+                  </div>
                 </div>
-                <div className="font-mono text-sm text-slate-200">
-                  {state?.cluster ?? "—"}
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                    UTC
+                  </div>
+                  <div className="tabular font-mono text-sm text-slate-200">
+                    {clock}
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                  UTC
-                </div>
-                <div className="tabular font-mono text-sm text-slate-200">
-                  {clock}
-                </div>
-              </div>
-              <div
-                className="flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1.5"
-                style={{ boxShadow: `0 0 16px -4px ${connMeta.color}` }}
-              >
-                <span
-                  className="h-2.5 w-2.5 animate-pulseDot rounded-full"
-                  style={{
-                    backgroundColor: connMeta.color,
-                    boxShadow: `0 0 10px ${connMeta.color}`,
-                  }}
-                />
-                <span
-                  className="text-[11px] font-semibold tracking-widest"
-                  style={{ color: connMeta.color }}
+                <div
+                  className="flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-1.5"
+                  style={{ boxShadow: `0 0 16px -4px ${connMeta.color}` }}
                 >
-                  {connMeta.label}
-                </span>
+                  <span
+                    className="h-2.5 w-2.5 animate-pulseDot rounded-full"
+                    style={{
+                      backgroundColor: connMeta.color,
+                      boxShadow: `0 0 10px ${connMeta.color}`,
+                    }}
+                  />
+                  <span
+                    className="text-[11px] font-semibold tracking-widest"
+                    style={{ color: connMeta.color }}
+                  >
+                    {connMeta.label}
+                  </span>
+                </div>
               </div>
             </div>
+            {state && (
+              <div className="mt-3 border-t border-white/5 pt-3">
+                <ProvenanceStrip sources={state.dataSources} />
+              </div>
+            )}
           </header>
 
           {state ? (
@@ -132,7 +142,7 @@ export default function App() {
                 <PriceTicker prices={state.prices} />
               </section>
 
-              <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_360px]">
+              <div className="mt-4 grid flex-1 gap-4 xl:grid-cols-[1fr_360px]">
                 <section>
                   <div className="mb-2 flex items-center justify-between">
                     <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
@@ -144,15 +154,46 @@ export default function App() {
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     {state.positions.map((p) => (
-                      <PositionCard key={p.name} pos={p} />
+                      <PositionCard
+                        key={p.name}
+                        pos={p}
+                        telemetryMode={state.dataSources.telemetry.mode}
+                        priceMode={state.dataSources.price.mode}
+                      />
                     ))}
                   </div>
                 </section>
 
-                <aside className="h-[560px] xl:sticky xl:top-4">
-                  <EventFeed events={state.events} />
+                <aside className="flex flex-col gap-4 xl:sticky xl:top-4 xl:h-[calc(100vh-2rem)]">
+                  <MarketPanel
+                    portfolio={state.portfolio}
+                    market={state.dataSources.market}
+                  />
+                  <div className="min-h-0 flex-1">
+                    <EventFeed events={state.events} />
+                  </div>
                 </aside>
               </div>
+
+              <footer className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2 text-[11px] text-slate-500">
+                <span>
+                  Price{" "}
+                  <span className="font-mono text-slate-400">
+                    {state.dataSources.price.label}
+                  </span>{" "}
+                  · Telemetry{" "}
+                  <span className="font-mono text-slate-400">
+                    {state.dataSources.telemetry.label}
+                  </span>{" "}
+                  · Market{" "}
+                  <span className="font-mono text-slate-400">
+                    {state.dataSources.market.label}
+                  </span>
+                </span>
+                <span>
+                  polling every 2s · updated {relTime(state.asOf)}
+                </span>
+              </footer>
             </>
           ) : (
             <div className="mt-24 text-center text-slate-500">

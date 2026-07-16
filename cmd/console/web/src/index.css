@@ -42,10 +42,49 @@ body {
 }
 
 .grid-overlay {
+  position: relative;
   background-image:
     linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
   background-size: 40px 40px;
+}
+
+.grid-overlay::before {
+  content: "";
+  position: fixed;
+  inset: -20% -20% auto -20%;
+  height: 60vh;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      40% 60% at 20% 20%,
+      rgba(56, 189, 248, 0.12),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 60% at 80% 10%,
+      rgba(52, 211, 153, 0.1),
+      transparent 70%
+    );
+  filter: blur(30px);
+  animation: aurora 18s ease-in-out infinite alternate;
+}
+
+.grid-overlay > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes aurora {
+  0% {
+    transform: translateX(-4%) translateY(-2%) scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateX(4%) translateY(2%) scale(1.08);
+    opacity: 1;
+  }
 }
 
 ::-webkit-scrollbar {

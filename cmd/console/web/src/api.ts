@@ -55,9 +55,21 @@ export interface EventView {
   message: string;
 }
 
+export interface SourceInfo {
+  mode: "mock" | "live";
+  label: string;
+}
+
+export interface DataSources {
+  price: SourceInfo;
+  telemetry: SourceInfo;
+  market: SourceInfo;
+}
+
 export interface State {
   asOf: string;
   cluster: string;
+  dataSources: DataSources;
   portfolio: Portfolio;
   prices: PriceView[];
   positions: PositionView[];
