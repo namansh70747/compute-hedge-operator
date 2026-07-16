@@ -1,0 +1,112 @@
+# Demo script (about 20 minutes of the call)
+
+The goal is to show, live, that idle GPUs and basis risk are measurable inside the cluster
+and routable back to the marketplace. Keep the story first, the terminal second.
+
+## Before the call
+
+Bring the stack up once so nothing is cold:
+
+```powershell
+pwsh -File scripts/demo.ps1
+```
+
+Open three terminals:
+
+1. `kubectl -n compute-hedge-system port-forward svc/grafana 3000:3000`
+2. `kubectl -n compute-hedge-system port-forward svc/prometheus 9090:9090`
+3. `kubectl get computepositions -A -w`
+
+Open Grafana at http://localhost:3000 (dashboard: "Compute Hedge Operator") and
+Prometheus alerts at http://localhost:9090/alerts.
+
+## 1. Frame the problem (2 min, no terminal)
+
+"Ornn hedges compute against the OCPI index. But a customer's real exposure is their own
+utilization on their own SKUs. Those only match at full utilization. The gap is basis risk,
+and it lives in the cluster, where the trading system cannot see it. I built the piece that
+sees it."
+
+## 2. Show the positions (2 min)
+
+```bash
+kubectl get computepositions -A
+kubectl describe computeposition training-cluster
+```
+
+Point out the printed columns: SKU, GPUs, live spot, P&L per hour, basis risk per hour,
+sublet flag, phase. Note the `recommendation` field in the status is plain English.
+
+## 3. Idle capacity into marketplace supply (5 min)
+
+Force the batch position idle:
+
+```powershell
+pwsh -File scripts/setutil.ps1 -Position batch-render -Util 3
+```
+
+Watch, in order:
+
+- Utilization on the dashboard drops.
+- After the idle window, `availableForSublet` flips to true and phase becomes `IdleAvailable`.
+- An Event is emitted: `kubectl describe computeposition batch-render` shows
+  `IdleCapacityAvailable`.
+- The `IdleCapacityAvailable` alert fires in Prometheus.
+
+Say: "That flag is marketplace supply. Every idle block detected here is inventory Ornn can
+match and earn a fee on."
+
+Bring it back:
+
+```powershell
+pwsh -File scripts/setutil.ps1 -Position batch-render -Util -1
+```
+
+The hysteresis means it only clears once utilization recovers past a margin, so it does not
+flicker.
+
+## 4. Basis risk and hedge P&L on a price move (6 min)
+
+Spike the H200 price:
+
+```powershell
+pwsh -File scripts/spike.ps1 -Sku H200 -Fraction 0.8
+```
+
+Watch the dashboard:
+
+- OCPI spot price for H200 jumps and decays back.
+- Hedge P&L moves against the short as spot rises.
+- Basis risk widens if utilization is below full, because the idle GPUs are now valued at a
+  higher spot.
+
+Say: "At full utilization the net result is locked to the hedge target regardless of price.
+The number you see moving is precisely the cost of the hedge not matching real usage."
+
+## 5. Opt-in action (3 min)
+
+`batch-render` opts in to pausing on a sustained spike (`enableActions: true`,
+`maxSpotPriceUSDPerHour: "3.60"`). With the spike above the cap:
+
+```bash
+kubectl get deploy batch-render -n default -w
+```
+
+- The operator scales `batch-render` to zero and emits `PausedOnPriceSpike`.
+- When the price decays below the cap, it restores replicas and emits `ResumedOnPriceRecovery`.
+
+Say: "This is off by default and never applies to critical workloads. It is opt-in per
+position, hysteresis-guarded, and every action is an auditable Event. The default posture is
+advisory."
+
+## 6. Close (2 min)
+
+"Everything here is one command on a laptop, no GPUs and no paid feed. The price source is an
+interface: flip `OCPI_MODE=ornn` and it reads the real index. The point is the seam -- turning
+cluster telemetry into position economics and marketplace supply."
+
+## Reset between runs
+
+```powershell
+pwsh -File scripts/teardown.ps1
+```
