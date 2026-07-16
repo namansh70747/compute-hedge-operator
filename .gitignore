@@ -6,5 +6,6 @@ dist/
 cover.out
 coverage.txt
 .env
+config/secret.yaml
 .DS_Store
 kubeconfig

@@ -61,9 +61,10 @@ Watch on the console, in order:
 - The `batch-render` card's utilization ring drops toward zero.
 - After the idle window, the phase badge flips to a glowing amber `Idle · available`, the
   card shows idle GPUs flagged for sublet, and the portfolio "Idle GPUs" / "Marketplace
-  supply" tiles tick up.
-- An `IdleCapacityAvailable` event appears in the live feed (and the
-  `IdleCapacityAvailable` alert fires in Prometheus for the drill-down).
+  supply" tiles tick up. The **Marketplace supply** panel on the right updates too.
+- Both an `IdleCapacityAvailable` and a `MarketplaceSupplyPosted` event appear in the live
+  feed (and the `IdleCapacityAvailable` alert fires in Prometheus for the drill-down). In
+  mock mode the supply post is advisory; with a live marketplace endpoint it is a real post.
 
 Say: "That flag is marketplace supply. Every idle block detected here is inventory Ornn can
 match and earn a fee on."
@@ -113,11 +114,25 @@ Say: "This is off by default and never applies to critical workloads. It is opt-
 position, hysteresis-guarded, and every action is an auditable Event. The default posture is
 advisory."
 
-## 6. Close (2 min)
+## 6. Flip to live (optional, 2 min)
 
-"Everything here is one command on a laptop, no GPUs and no paid feed. The price source is an
-interface: flip `OCPI_MODE=ornn` and it reads the real index. The point is the seam -- turning
-cluster telemetry into position economics and marketplace supply."
+If they hand you a token on the call, show that it is genuinely a drop-in — no rebuild:
+
+```bash
+cp .env.example .env        # paste ORNN_API_TOKEN (and PROMETHEUS_URL / MARKET_API_URL if offered)
+make live                   # applies the ornn-credentials Secret and restarts operator + console
+```
+
+Watch the console header flip from amber **SIMULATED DATA** to emerald **LIVE - api.ornnai.com**
+and the provenance strip / per-card chips switch to the real endpoints. `make mock` rolls it
+straight back. Nothing was recompiled — same image, same code.
+
+## 7. Close (2 min)
+
+"Everything here is one command on a laptop, no GPUs and no paid feed. But every source is a
+drop-in: price, telemetry, and marketplace all auto-switch to live the moment real Ornn
+credentials are present, and the UI proves which one it is reading. The point is the seam --
+turning cluster telemetry into position economics and marketplace supply."
 
 ## Reset between runs
 

@@ -29,8 +29,16 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["/operator"]
           env:
+            # auto = live when credentials are present (from the optional secret below),
+            # otherwise the bundled simulator. No code change is needed to go live.
             - name: OCPI_MODE
-              value: "mock"
+              value: "auto"
+            - name: TELEMETRY_MODE
+              value: "auto"
+            - name: MARKET_MODE
+              value: "auto"
+            - name: CLUSTER_NAME
+              value: "kind-compute-hedge"
             - name: OCPI_URL
               value: "http://mockocpi.compute-hedge-system.svc:8080"
             - name: GPU_EXPORTER_URL
@@ -39,6 +47,12 @@ spec:
               value: ":8082"
             - name: HEALTH_ADDR
               value: ":8083"
+          # Drop real Ornn credentials into this secret (see config/secret.example.yaml)
+          # and the operator flips to live automatically. Absent secret stays mock.
+          envFrom:
+            - secretRef:
+                name: ornn-credentials
+                optional: true
           ports:
             - name: metrics
               containerPort: 8082

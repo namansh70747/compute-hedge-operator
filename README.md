@@ -37,28 +37,39 @@ Ornn's marketplace to earn fees instead of sitting stranded.
 ## Architecture
 
 ```
-ComputePosition (CRD)
-        |
-        v
-  operator (controller-runtime)  --reads-->  OCPI price source (mock service | real Ornn Data API)
-        |                        --reads-->  gpuexporter (dcgm-style utilization)
+  .env / K8s Secret (optional) --> internal/config resolver (auto | mock | live)
+                                          |
+ComputePosition (CRD)                     | selects each source
+        |                                 v
+        v          price     --> mock OCPI service   | real Ornn Data API (token)
+  operator         telemetry --> mock gpuexporter    | Prometheus / DCGM (PROMETHEUS_URL)
+  (controller-     market    --> log-only (advisory) | Ornn marketplace (MARKET_API_URL)
+   runtime)
         |
         +--> status + Kubernetes Events
         +--> Prometheus metrics --> Grafana dashboard + alert rules
         +--> optional pause/resume of an opted-in Deployment
+        +--> posts idle capacity to the marketplace when sublet flips
 
-  console (read-only) --reads--> ComputePositions + Events + OCPI prices
+  console (read-only) --reads--> ComputePositions + Events + prices + resolved modes
         |
-        +--> live "trading desk" web UI  (the headline surface)
+        +--> live "trading desk" web UI with a SIMULATED/LIVE badge  (headline surface)
 ```
+
+With no configuration every source is the bundled simulator. The moment real Ornn
+credentials appear (in `.env` locally, or a Kubernetes Secret in-cluster) each source
+auto-switches to live and the console badge flips from **SIMULATED DATA** to **LIVE**. No
+code change is required.
 
 - `cmd/operator` — the controller.
 - `cmd/console` — a read-only live control-room web UI (embedded React SPA + small Go API) that reads positions, events, and prices from the cluster. The headline demo surface.
 - `cmd/mockocpi` — a local OCPI price service (mean-reverting prices, spike endpoint for demos).
 - `cmd/gpuexporter` — simulated per-position GPU utilization (dcgm-style), controllable for demos.
 - `internal/hedge` — the basis-risk / hedge-effectiveness math (unit tested).
+- `internal/config` — dependency-free `.env` loader, mode resolution (`auto|mock|live`), and the factories that build each source.
 - `internal/ocpi` — pluggable price source: mock HTTP service or the real Ornn Data API.
-- `internal/telemetry` — utilization source.
+- `internal/telemetry` — utilization source: mock exporter or live Prometheus/DCGM.
+- `internal/market` — marketplace publisher: log-only (advisory) or live HTTP write-back.
 - `internal/console` — state aggregation and rolling history for the console API.
 - `internal/metrics` — Prometheus series.
 
@@ -120,11 +131,43 @@ kubectl get computepositions -A -w
 | `chp_idle_gpu_count` | Idle GPUs in a position |
 | `chp_available_for_sublet` | 1 when idle capacity is flagged for the secondary market |
 
-## Real data
+## Go live in 60 seconds
 
-The price source is an interface. `scripts/demo.ps1` wires the bundled mock service so the
-demo is deterministic and free. Set `OCPI_MODE=ornn` with an Ornn Data subscription token to
-read the real OCPI index instead; no code changes are required.
+Every external dependency is pluggable. Blank config runs the mock prototype; real
+credentials flip it to live with no code change.
+
+In-cluster (the demo cluster is already running):
+
+```bash
+cp .env.example .env         # fill in ORNN_API_TOKEN (and optionally PROMETHEUS_URL / MARKET_API_URL)
+make live                    # builds the ornn-credentials Secret from .env and restarts both pods
+```
+
+Watch the console header flip from **SIMULATED DATA** to **LIVE - api.ornnai.com**, and the
+provenance strip show the real endpoints. Roll back any time with `make mock`.
+
+Local dev (no cluster): `make run-operator` and `make run-console` both read `.env` from the
+working directory automatically.
+
+### Environment knobs
+
+Each source resolves independently: `auto` = live when its credentials/URL are present,
+otherwise mock. `mock` and `live` force the choice. Full reference in `.env.example`.
+
+| Variable | Purpose | Blank (mock) → filled (live) |
+| --- | --- | --- |
+| `OCPI_MODE` / `TELEMETRY_MODE` / `MARKET_MODE` | per-source mode | `auto` |
+| `ORNN_API_TOKEN` | Ornn Data API token | mock prices → live OCPI index |
+| `ORNN_API_BASE_URL`, `ORNN_API_PRICE_PATH` | live price endpoint | — |
+| `PROMETHEUS_URL` | Prometheus base URL | mock exporter → live DCGM |
+| `TELEMETRY_QUERY` | PromQL template (`{position}`, `{namespace}`) | `avg(DCGM_FI_DEV_GPU_UTIL{position="{position}"})` |
+| `MARKET_API_URL`, `MARKET_API_PATH` | marketplace endpoint | advisory → live supply posting |
+| `MARKET_WRITE_ENABLED` | safety switch for posting | `false`; must be `true` to post |
+| `AUTH_SCHEME`, `AUTH_HEADER` | shared auth for every live client | `Bearer`, `Authorization` |
+
+Marketplace write-back never posts anything unless both `MARKET_API_URL` is set and
+`MARKET_WRITE_ENABLED=true`. Live adapters degrade gracefully to last-known/mock on error,
+so a flaky endpoint never hard-fails the demo.
 
 ## Docs
 

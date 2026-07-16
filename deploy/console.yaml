@@ -58,12 +58,24 @@ spec:
           env:
             - name: LISTEN_ADDR
               value: ":8090"
+            # auto = show LIVE provenance when Ornn credentials are present, else SIMULATED.
+            - name: OCPI_MODE
+              value: "auto"
+            - name: TELEMETRY_MODE
+              value: "auto"
+            - name: MARKET_MODE
+              value: "auto"
             - name: OCPI_URL
               value: "http://mockocpi:8080"
             - name: CLUSTER_NAME
               value: "kind-compute-hedge"
             - name: POLL_INTERVAL
               value: "2s"
+          # Same optional secret as the operator: present => the console badge flips LIVE.
+          envFrom:
+            - secretRef:
+                name: ornn-credentials
+                optional: true
           ports:
             - name: http
               containerPort: 8090

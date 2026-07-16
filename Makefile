@@ -2,7 +2,7 @@ IMG ?= compute-hedge-operator:dev
 CLUSTER ?= compute-hedge
 NS ?= compute-hedge-system
 
-.PHONY: build test vet fmt docker-build kind-create kind-load deploy samples demo teardown
+.PHONY: build test vet fmt docker-build kind-create kind-load deploy samples demo teardown live mock run-operator run-console
 
 build:
 	go build ./...
@@ -58,3 +58,22 @@ demo: docker-build kind-create kind-load deploy samples
 
 teardown:
 	kind delete cluster --name $(CLUSTER)
+
+# Go live in-cluster: build the ornn-credentials secret from .env and restart both pods.
+live:
+	kubectl create secret generic ornn-credentials -n $(NS) --from-env-file=.env --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n $(NS) rollout restart deploy/compute-hedge-operator deploy/console
+	@echo "Live mode: ornn-credentials applied; operator + console restarting."
+
+# Back to the simulator: drop the secret and restart both pods.
+mock:
+	-kubectl -n $(NS) delete secret ornn-credentials --ignore-not-found
+	kubectl -n $(NS) rollout restart deploy/compute-hedge-operator deploy/console
+	@echo "Mock mode: ornn-credentials removed; operator + console restarting."
+
+# Local dev: both load .env from the working directory automatically.
+run-operator:
+	go run ./cmd/operator
+
+run-console:
+	go run ./cmd/console

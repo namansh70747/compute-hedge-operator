@@ -22,7 +22,19 @@ feed are required for the demo.
 
 ## Going beyond the demo
 
-- Real prices: set `OCPI_MODE=ornn` and provide an Ornn Data subscription token. The client
-  in `internal/ocpi/ornndata.go` reads the OCPI index directly.
-- Real utilization: point the telemetry source at NVIDIA `dcgm-exporter` metrics instead of
-  the bundled simulator. The interface is unchanged.
+Every source is pluggable and auto-detected. Copy `.env.example` to `.env`, fill in what you
+have, and run `make live` (in-cluster) or `make run-operator` / `make run-console` (local).
+Nothing else changes.
+
+- **Real prices:** set `ORNN_API_TOKEN` (with `ORNN_API_BASE_URL` / `ORNN_API_PRICE_PATH`).
+  With `OCPI_MODE=auto` the presence of the token flips the price feed to the live OCPI
+  index via `internal/ocpi/ornndata.go`.
+- **Real utilization:** set `PROMETHEUS_URL` (optionally `TELEMETRY_QUERY`) to read NVIDIA
+  `dcgm-exporter` metrics through Prometheus. The mock exporter is used when it is blank.
+- **Marketplace write-back:** set `MARKET_API_URL` and `MARKET_WRITE_ENABLED=true` to post
+  idle capacity as real supply. Off by default so nothing is ever posted by accident.
+- **Any auth scheme:** `AUTH_SCHEME` / `AUTH_HEADER` adapt every live HTTP client to whatever
+  token format Ornn provides.
+
+See the full knob reference in `.env.example` and the "Go live in 60 seconds" section of the
+README.
