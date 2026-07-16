@@ -28,6 +28,7 @@ kubectl apply -f config/manager.yaml
 kubectl apply -f deploy/mockocpi.yaml
 kubectl apply -f deploy/gpuexporter.yaml
 kubectl apply -f deploy/workloads.yaml
+kubectl apply -f deploy/console.yaml
 
 Write-Host "==> Loading Grafana dashboard"
 kubectl create configmap grafana-dashboard -n $Ns `
@@ -39,6 +40,7 @@ kubectl apply -f observability/grafana.yaml
 
 Write-Host "==> Waiting for rollouts"
 kubectl -n $Ns rollout status deploy/compute-hedge-operator --timeout=120s
+kubectl -n $Ns rollout status deploy/console --timeout=120s
 kubectl -n $Ns rollout status deploy/grafana --timeout=120s
 
 Write-Host "==> Creating sample positions"
@@ -46,7 +48,11 @@ kubectl apply -f deploy/samples/computepositions.yaml
 
 Write-Host ""
 Write-Host "Demo is up."
-Write-Host "Open the dashboards in two terminals:"
+Write-Host "Headline console (open this first):"
+Write-Host "  kubectl -n $Ns port-forward svc/console 8090:8090"
+Write-Host "Console:    http://localhost:8090"
+Write-Host ""
+Write-Host "Engineer's drill-down (optional, separate terminals):"
 Write-Host "  kubectl -n $Ns port-forward svc/grafana 3000:3000"
 Write-Host "  kubectl -n $Ns port-forward svc/prometheus 9090:9090"
 Write-Host "Grafana:    http://localhost:3000  (dashboard: Compute Hedge Operator)"

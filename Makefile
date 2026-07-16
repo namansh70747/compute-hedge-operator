@@ -32,12 +32,14 @@ deploy:
 	kubectl apply -f deploy/mockocpi.yaml
 	kubectl apply -f deploy/gpuexporter.yaml
 	kubectl apply -f deploy/workloads.yaml
+	kubectl apply -f deploy/console.yaml
 	kubectl create configmap grafana-dashboard -n $(NS) \
 		--from-file=compute-hedge.json=observability/grafana-dashboard.json \
 		--dry-run=client -o yaml | kubectl apply -f -
 	kubectl apply -f observability/prometheus.yaml
 	kubectl apply -f observability/grafana.yaml
 	kubectl -n $(NS) rollout status deploy/compute-hedge-operator --timeout=120s
+	kubectl -n $(NS) rollout status deploy/console --timeout=120s
 	kubectl -n $(NS) rollout status deploy/grafana --timeout=120s
 
 samples:
@@ -45,7 +47,11 @@ samples:
 
 demo: docker-build kind-create kind-load deploy samples
 	@echo ""
-	@echo "Demo is up. Open dashboards with:"
+	@echo "Demo is up. Open the console (headline) with:"
+	@echo "  kubectl -n $(NS) port-forward svc/console 8090:8090"
+	@echo "Console: http://localhost:8090"
+	@echo ""
+	@echo "Engineer's drill-down:"
 	@echo "  kubectl -n $(NS) port-forward svc/grafana 3000:3000"
 	@echo "  kubectl -n $(NS) port-forward svc/prometheus 9090:9090"
 	@echo "Grafana: http://localhost:3000  (dashboard: Compute Hedge Operator)"

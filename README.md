@@ -46,15 +46,29 @@ ComputePosition (CRD)
         +--> status + Kubernetes Events
         +--> Prometheus metrics --> Grafana dashboard + alert rules
         +--> optional pause/resume of an opted-in Deployment
+
+  console (read-only) --reads--> ComputePositions + Events + OCPI prices
+        |
+        +--> live "trading desk" web UI  (the headline surface)
 ```
 
 - `cmd/operator` — the controller.
+- `cmd/console` — a read-only live control-room web UI (embedded React SPA + small Go API) that reads positions, events, and prices from the cluster. The headline demo surface.
 - `cmd/mockocpi` — a local OCPI price service (mean-reverting prices, spike endpoint for demos).
 - `cmd/gpuexporter` — simulated per-position GPU utilization (dcgm-style), controllable for demos.
 - `internal/hedge` — the basis-risk / hedge-effectiveness math (unit tested).
 - `internal/ocpi` — pluggable price source: mock HTTP service or the real Ornn Data API.
 - `internal/telemetry` — utilization source.
+- `internal/console` — state aggregation and rolling history for the console API.
 - `internal/metrics` — Prometheus series.
+
+## Surfaces
+
+- **Compute Hedge Console (headline)** — a bespoke, dark control-room UI: portfolio tiles,
+  a live OCPI ticker, per-position cards with utilization rings, hedge-effectiveness gauges
+  and basis-risk sparklines, and a live event feed. Read-only; served from the cluster.
+- **Grafana (engineer's drill-down)** — the same signals as Prometheus time series, for
+  deeper inspection and alert rules.
 
 ## Quickstart (local, free)
 
@@ -70,14 +84,23 @@ or, on Linux/macOS:
 make demo
 ```
 
-Then port-forward the dashboards:
+Then open the headline console:
+
+```bash
+kubectl -n compute-hedge-system port-forward svc/console 8090:8090
+```
+
+The console is at http://localhost:8090.
+
+For the engineer's drill-down, port-forward Grafana/Prometheus:
 
 ```bash
 kubectl -n compute-hedge-system port-forward svc/grafana 3000:3000
 kubectl -n compute-hedge-system port-forward svc/prometheus 9090:9090
 ```
 
-Grafana is at http://localhost:3000 (dashboard: "Compute Hedge Operator").
+Grafana is login-free at http://localhost:3000 and lands directly on the
+"Compute Hedge Operator" dashboard.
 
 Watch positions:
 
